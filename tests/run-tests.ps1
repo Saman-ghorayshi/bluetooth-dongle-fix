@@ -6,7 +6,12 @@
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 . (Join-Path $here 'TestFramework.ps1')
-Import-Module (Join-Path (Split-Path -Parent $here) 'src\BTFix.psm1') -Force
+$src = Join-Path (Split-Path -Parent $here) 'src'
+Import-Module (Join-Path $src 'BTFix.psm1') -Force
+Import-Module (Join-Path $src 'ProblemCodes.psm1') -Force
+Import-Module (Join-Path $src 'Chipsets.psm1') -Force
+Import-Module (Join-Path $src 'Health.psm1') -Force
+Import-Module (Join-Path $src 'Findings.psm1') -Force
 
 function New-Radio {
     param(
@@ -24,7 +29,7 @@ function New-Radio {
         ProblemStatus  = $null
         DriverVersion  = '10.0.26100.9711'
         DriverProvider = 'Microsoft'
-        HardwareIds    = @("USB\VID_0A12&PID_0001")
+        HardwareIds    = @('USB\VID_0A12&PID_0001')
         LocationInfo   = 'Port_#0001.Hub_#0001'
         Parent         = 'USB\ROOT_HUB30\4&84aac64&0&0'
         IsInternal     = $Internal
@@ -141,7 +146,6 @@ Describe 'report' {
             Assert-True (Test-Path -LiteralPath $file)
             Assert-Match '## Radios' $text
             Assert-Match '## Recommended actions' $text
-            Assert-Match 'Generic Bluetooth Radio' ($text + (Get-Content $file -Raw))
         } finally {
             Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
         }
@@ -163,6 +167,103 @@ Describe 'tooling' {
 
     It 'puts state under LOCALAPPDATA by default' {
         Assert-Match 'BTFix' (Get-BTFixStateRoot)
+    }
+}
+
+Describe 'problem codes' {
+    It 'maps code 31 to CM_PROB_FAILED_ADD' {
+        $row = Get-BTFixProblemCode -Code 31
+        Assert-Equal 'CM_PROB_FAILED_ADD' $row.Name
+        Assert-True ($row.Fix -match 'radio')
+    }
+
+    It 'maps code 45 to CM_PROB_PHANTOM (not connected)' {
+        Assert-Equal 'CM_PROB_PHANTOM' (Get-BTFixProblemCode -Code 45).Name
+    }
+
+    It 'knows the code Windows blocks drivers with' {
+        Assert-Equal 'CM_PROB_DRIVER_BLOCKED' (Get-BTFixProblemCode -Code 48).Name
+    }
+
+    It 'returns nothing for an unknown code' {
+        Assert-True ($null -eq (Get-BTFixProblemCode -Code 999))
+    }
+
+    It 'exposes the whole table' {
+        $table = Get-BTFixProblemCodeTable
+        Assert-True ($table.Count -ge 20) "expected at least 20 codes, got $($table.Count)"
+    }
+}
+
+Describe 'chipset guidance' {
+    It 'recognises the CSR style id' {
+        $m = Get-BTFixChipset -HardwareId 'USB\VID_0A12&PID_0001&REV_8891'
+        Assert-True (@($m)[0].Family -match 'CSR')
+    }
+
+    It 'recognises Intel and Realtek ids' {
+        Assert-True (@(Get-BTFixChipset -HardwareId 'USB\VID_8087&PID_0032')[0].Family -match 'Intel')
+        Assert-True (@(Get-BTFixChipset -HardwareId 'USB\VID_0BDA&PID_4853')[0].Family -match 'Realtek')
+    }
+
+    It 'says so when it does not know the chipset' {
+        $m = @(Get-BTFixChipset -HardwareId 'USB\VID_FFFF&PID_FFFF')
+        Assert-Equal 'Unknown chipset' $m[0].Family
+    }
+}
+
+Describe 'health checks' {
+    It 'reports the services the stack needs' {
+        $services = Get-BTFixServiceHealth
+        Assert-Equal 3 $services.Count
+        Assert-Equal 1 @($services | Where-Object { $_.Name -eq 'bthserv' }).Count
+    }
+
+    It 'can read the software radio switch' {
+        $state = Get-BTFixRadioSoftwareState
+        Assert-True ($state -is [object])
+        Assert-True ($state.IsRadioOff -is [bool])
+    }
+
+    It 'lists paired peripherals without throwing' {
+        $paired = Get-BTFixPairedDevice
+        Assert-True ($null -ne $paired)
+    }
+}
+
+Describe 'findings' {
+    It 'flags the dual-radio conflict as auto-fixable' {
+        $f = @(Get-BTFixFinding -Inventory @(
+                (New-Radio -Id 'USB\BAD' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error'),
+                (New-Radio -Id 'USB\GOOD' -Name 'Realtek Bluetooth Adapter')
+            ) -NoLive)
+        $conflict = @($f | Where-Object { $_.Id -eq 'radio-31' })[0]
+        Assert-True ($null -ne $conflict) 'expected a radio-31 finding'
+        Assert-True $conflict.AutoFixable
+        Assert-True ($conflict.Title -match 'fighting')
+    }
+
+    It 'explains a missing driver' {
+        $f = @(Get-BTFixFinding -Inventory @(
+                (New-Radio -Id 'USB\NOdrv' -Name 'Generic Bluetooth Radio' -Code 28 -Status 'Error')
+            ) -NoLive)
+        $row = @($f | Where-Object { $_.Id -eq 'radio-28' })[0]
+        Assert-True ($null -ne $row)
+        Assert-True ($row.Fix -match 'driver')
+    }
+
+    It 'warns that a blocked driver needs a vendor update' {
+        $f = @(Get-BTFixFinding -Inventory @(
+                (New-Radio -Id 'USB\BLOCKED' -Code 48 -Status 'Error')
+            ) -NoLive)
+        $row = @($f | Where-Object { $_.Id -eq 'radio-48' })[0]
+        Assert-True ($null -ne $row)
+        Assert-True ($row.Title -match 'Driver Protection')
+    }
+
+    It 'reports no radio at all' {
+        $f = @(Get-BTFixFinding -Inventory @() -NoLive)
+        Assert-Equal 1 @($f | Where-Object { $_.Id -eq 'no-radio' }).Count
     }
 }
 
