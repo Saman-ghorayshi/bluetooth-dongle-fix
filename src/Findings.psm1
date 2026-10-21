@@ -55,17 +55,19 @@ function Get-BTFixFinding {
     # Which radio does the user want working? The external dongle by default
     # (that is what people plug in), the internal adapter otherwise.
     $wanted = $null
-    $pool = if ($null -ne $Inventory) {
-        @($radios | Where-Object { -not $_.IsInternal })
-    } else {
-        @($radios | Where-Object { -not $_.IsInternal -and $_.IsHealthy })
-    }
-    if ($pool.Count -eq 0) {
-        $pool = if ($null -ne $Inventory) {
-            @($radios | Where-Object { $_.IsInternal })
+    # The whole if-expression is wrapped in @(): an if used as an expression
+    # unrolls a single-element array into a scalar, which breaks .Count.
+    $pool = @(if ($null -ne $Inventory) {
+            @($radios | Where-Object { -not $_.IsInternal })
         } else {
-            @($radios | Where-Object { $_.IsHealthy })
-        }
+            @($radios | Where-Object { -not $_.IsInternal -and $_.IsHealthy })
+        })
+    if ($pool.Count -eq 0) {
+        $pool = @(if ($null -ne $Inventory) {
+                @($radios | Where-Object { $_.IsInternal })
+            } else {
+                @($radios | Where-Object { $_.IsHealthy })
+            })
     }
     if ($pool.Count -gt 0) { $wanted = $pool[0] }
 
