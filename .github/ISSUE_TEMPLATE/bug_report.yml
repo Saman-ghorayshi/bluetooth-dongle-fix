@@ -1,0 +1,62 @@
+name: Bug report
+
+description: The Bluetooth dongle is not recognized / shows an error in Device Manager
+
+labels: [bug, needs-triage]
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Please run `.\BTFix.ps1 -Mode Report` first and
+        paste the output below — it tells us the radio, its driver and the
+        exact problem code.
+
+  - type: textarea
+    id: btfix-report
+    attributes:
+      label: BTFix report
+      description: Output of `.\BTFix.ps1 -Mode Report`
+      render: text
+    validations:
+      required: true
+
+  - type: dropdown
+    id: symptom
+    attributes:
+      label: What do you see?
+      options:
+        - Device Manager shows a yellow bang on the Bluetooth adapter
+        - The adapter is missing entirely
+        - The adapter works, but my headphones/earbuds do not connect
+        - "Bluetooth device not found" when pairing
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: adapter
+    attributes:
+      label: Adapter model / chipset
+      description: e.g. "Generic Bluetooth Radio, VID_0A12&PID_0001" or the brand
+    validations:
+      required: false
+
+  - type: dropdown
+    id: windows
+    attributes:
+      label: Windows version
+      options:
+        - Windows 11
+        - Windows 10
+        - Windows 8.1 / 7
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else?
+      description: Other radios present, dongle plugged into which port, what you already tried
+    validations:
+      required: false
