@@ -33,7 +33,7 @@ function Get-BTFixFinding {
         } elseif ($NoLive) {
             # deliberately empty
         } else {
-            Get-BTFixRadio
+            Get-BTFixRadio | ForEach-Object { $_ }
         })
     $findings = @()
 
@@ -52,6 +52,23 @@ function Get-BTFixFinding {
     }
 
     # --- the classic dongle problem -------------------------------------
+    # Which radio does the user want working? The external dongle by default
+    # (that is what people plug in), the internal adapter otherwise.
+    $wanted = $null
+    $pool = if ($null -ne $Inventory) {
+        @($radios | Where-Object { -not $_.IsInternal })
+    } else {
+        @($radios | Where-Object { -not $_.IsInternal -and $_.IsHealthy })
+    }
+    if ($pool.Count -eq 0) {
+        $pool = if ($null -ne $Inventory) {
+            @($radios | Where-Object { $_.IsInternal })
+        } else {
+            @($radios | Where-Object { $_.IsHealthy })
+        }
+    }
+    if ($pool.Count -gt 0) { $wanted = $pool[0] }
+
     foreach ($r in $broken) {
         $code = Get-BTFixProblemCode -Code $r.ProblemCode
         $chip = @(Get-BTFixChipset -HardwareId ($r.HardwareIds -join ';')) | Select-Object -First 1
@@ -60,8 +77,19 @@ function Get-BTFixFinding {
         $fix = if ($code) { $code.Fix } else { 'Remove the device and re-scan it.' }
         $auto = $false
         $title = "Bluetooth radio is not working (code $($r.ProblemCode))"
+        $severity = 'High'
 
-        if ($code -and $code.Code -eq 31 -and $healthy.Count -gt 0) {
+        $isWanted = ($wanted -and $r.InstanceId -eq $wanted.InstanceId)
+        if (-not $isWanted -and $healthy.Count -gt 0) {
+            # A second radio cannot run while another one owns the stack, so
+            # this is the expected consequence of the conflict, not a new fault.
+            $severity = 'Info'
+            $title = "Radio '$($r.FriendlyName)' is parked while '$($wanted.FriendlyName)' owns the Bluetooth stack"
+            $detail = "It reports code $($r.ProblemCode), which is what Windows does to the adapter that does not hold the stack."
+            $fix = "Nothing to do - only one Bluetooth radio can own the stack at a time. Run '.\BTFix.ps1 -Mode Fix' if you prefer this one instead."
+            $auto = $false
+        }
+        elseif ($code -and $code.Code -eq 31 -and $healthy.Count -gt 0) {
             $title = 'Two Bluetooth radios are fighting over the stack'
             $detail += " Another radio ($($healthy[0].FriendlyName)) currently owns the Bluetooth stack, and only one adapter can own it at a time."
             $fix = "Disable the other radio and re-scan; the dongle then starts cleanly. (Microsoft's advice for code 31 is to update the driver, but on dongles the conflict is the real cause - see docs/troubleshooting.md.)"
@@ -78,9 +106,9 @@ function Get-BTFixFinding {
         }
 
         $findings += [pscustomobject]@{
-            Id = "radio-$($r.ProblemCode)"; Severity = 'High'; Title = $title
+            Id = "radio-$($r.ProblemCode)"; Severity = $severity; Title = $title
             Detail = $detail; Fix = $fix; AutoFixable = $auto
-            Data = @{ Radio = $r; ProblemCode = $code; Chipset = $chip }
+            Data = @{ Radio = $r; ProblemCode = $code; Chipset = $chip; IsWanted = $isWanted }
         }
     }
 

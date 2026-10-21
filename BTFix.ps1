@@ -133,7 +133,7 @@ switch ($effectiveMode) {
         Write-Host ''
         Write-Host 'Bluetooth radios' -ForegroundColor Cyan
         Write-Host '-----------------'
-        $radios = Get-BTFixRadio
+        $radios = @(Get-BTFixRadio)
         if ($radios.Count -eq 0) { Write-Host '  (no Bluetooth radio found)' -ForegroundColor Yellow }
         foreach ($r in $radios) {
             $state = if ($r.IsHealthy) { 'OK' } elseif ($r.IsDisabled) { 'disabled (by us)' } else { "problem code $($r.ProblemCode)" }

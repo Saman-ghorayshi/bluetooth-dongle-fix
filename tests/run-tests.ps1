@@ -226,7 +226,7 @@ Describe 'health checks' {
     }
 
     It 'lists paired peripherals without throwing' {
-        $paired = Get-BTFixPairedDevice
+        $paired = @(Get-BTFixPairedDevice)
         Assert-True ($null -ne $paired)
     }
 }
