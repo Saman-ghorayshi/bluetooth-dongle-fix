@@ -83,16 +83,16 @@ function Get-BTFixChipset {
     }
     if ($ids.Count -eq 0) { return $script:ChipsetTable }
 
-    $matches = @()
+    $found = @()
     foreach ($row in $script:ChipsetTable) {
         foreach ($id in $ids) {
             if ($id -like ('*' + $row.Pattern + '*')) {
-                $matches += $row
+                $found += $row
                 break
             }
         }
     }
-    if ($matches.Count -eq 0) {
+    if ($found.Count -eq 0) {
         return @([pscustomobject]@{
             Pattern     = ($ids -join ' ')
             Family      = 'Unknown chipset'
@@ -101,7 +101,7 @@ function Get-BTFixChipset {
             DriverUrl   = ''
         })
     }
-    return $matches
+    return $found
 }
 
 <#

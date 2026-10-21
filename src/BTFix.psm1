@@ -12,6 +12,8 @@ $script:BluetoothClassGuid = '{E0CBF06C-CD8B-4647-BB8F-263B43F0C0B74}'
 
 function Write-BTFixLog {
     [CmdletBinding()]
+    [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
+        Justification = 'This is a command line tool: progress belongs on the console, not in the pipeline.')]
     param(
         [Parameter(Mandatory)][string]$Message,
         [ValidateSet('INFO', 'WARN', 'ERROR', 'OK', 'STEP')][string]$Level = 'INFO',
@@ -25,6 +27,7 @@ function Write-BTFixLog {
             Add-Content -LiteralPath $Path -Value $line -Encoding utf8
         } catch {
             # logging must never break the run
+            Write-Verbose "could not write to the log file: $($_.Exception.Message)"
         }
     }
 }
@@ -62,6 +65,7 @@ function Get-BTFixProperty {
         if ($p) { return $p.Data }
     } catch {
         # property may not exist for every device
+        Write-Verbose "property $KeyName is not available for $InstanceId"
     }
     return $null
 }

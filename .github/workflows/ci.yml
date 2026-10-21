@@ -17,12 +17,12 @@ jobs:
         shell: powershell
         run: .\tests\run-tests.ps1
 
-      - name: Smoke test the CLI (diagnose must not fail)
+      - name: Smoke test the CLI (check must not fail)
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
-          & .\BTFix.ps1 -Mode Diagnose
-          if ($LASTEXITCODE -ne 0) { throw "diagnose exited with $LASTEXITCODE" }
+          & .\BTFix.ps1 -Mode Check
+          if (-not $?) { throw "BTFix Check failed" }
 
   lint:
     name: Lint (PSScriptAnalyzer)
