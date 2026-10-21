@@ -1,4 +1,4 @@
-# BTFix — Bluetooth radio diagnostics and repair engine.
+﻿# BTFix — Bluetooth radio diagnostics and repair engine.
 #
 # Everything here is side-effect free unless a function explicitly says
 # otherwise; the mutating helpers all support -WhatIf via
@@ -313,3 +313,220 @@ function Invoke-BTFixRescan {
     }
 }
 
+<#
+.SYNOPSIS
+Runs the repair pipeline.
+.DESCRIPTION
+1. snapshot state
+2. restart the Bluetooth stack
+3. re-enumerate the broken radio (remove + rescan)
+4. if it is still broken and another radio is healthy, disable that one and
+   rescan (the stack can only be held by a single radio)
+5. verify, and report
+#>
+function Invoke-BTFixRepair {
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([object])]
+    param(
+        [string]$Radio,
+        [switch]$PreferInternal,
+        [switch]$SearchWindowsUpdate,
+        [string]$BackupPath,
+        [string]$LogPath
+    )
+
+    $steps = @()
+    $diagnosis = Get-BTFixDiagnosis
+    Write-BTFixLog -Message "diagnosis: $($diagnosis.Classification) (confidence $($diagnosis.Confidence))" -Level 'STEP' -Path $LogPath
+    foreach ($e in $diagnosis.Evidence) { Write-BTFixLog -Message $e -Path $LogPath }
+
+    if ($diagnosis.Broken.Count -eq 0) {
+        Write-BTFixLog -Message 'nothing to repair — every radio is healthy' -Level 'OK' -Path $LogPath
+        return [pscustomobject]@{ Changed = $false; Diagnosis = $diagnosis; Steps = $steps; Backup = $null }
+    }
+
+    $backup = New-BTFixBackup -Radios $diagnosis.Radios -BackupPath $BackupPath
+    Write-BTFixLog -Message "backup written: $backup" -Level 'OK' -Path $LogPath
+
+    # step 1: restart the stack
+    Restart-BTFixStack -LogPath $LogPath
+    $steps += 'restarted bthserv'
+
+    # step 2: re-enumerate the broken radio
+    foreach ($bad in $diagnosis.Broken) {
+        if ($PSCmdlet.ShouldProcess($bad.InstanceId, 'Remove and re-enumerate')) {
+            Invoke-BTFixPnp -Arguments @('/remove-device', $bad.InstanceId) -LogPath $LogPath | Out-Null
+            $steps += "removed $($bad.InstanceId)"
+        }
+    }
+    Invoke-BTFixRescan -LogPath $LogPath
+    $steps += 'rescanned hardware'
+
+    $after = Get-BTFixDiagnosis
+    if ($after.Broken.Count -gt 0 -and $after.Healthy.Count -gt 0) {
+        # step 3: break the conflict
+        $keep = if ($PreferInternal) { $after.Healthy | Where-Object { $_.IsInternal } | Select-Object -First 1 } else { $null }
+        $disable = if ($keep) { $after.Healthy | Where-Object { -not $_.IsInternal } | Select-Object -First 1 } else { $after.Healthy | Select-Object -First 1 }
+        if ($disable) {
+            Write-BTFixLog -Message "disabling conflicting radio: $($disable.FriendlyName)" -Level 'STEP' -Path $LogPath
+            if ($PSCmdlet.ShouldProcess($disable.InstanceId, 'Disable radio')) {
+                Invoke-BTFixPnp -Arguments @('/disable-device', $disable.InstanceId) -LogPath $LogPath | Out-Null
+                $steps += "disabled $($disable.InstanceId)"
+            }
+            Invoke-BTFixRescan -LogPath $LogPath
+            $steps += 'rescanned after conflict break'
+        }
+    }
+
+    if ($SearchWindowsUpdate) {
+        $steps += (Invoke-BTFixWindowsUpdate -LogPath $LogPath)
+    }
+
+    $final = Get-BTFixDiagnosis
+    $ok = $final.Broken.Count -eq 0
+    Write-BTFixLog -Message ("final state: " + $(if ($ok) { 'all radios healthy' } else { 'still broken' })) -Level $(if ($ok) { 'OK' } else { 'ERROR' }) -Path $LogPath
+
+    return [pscustomobject]@{
+        Changed   = $steps.Count -gt 0
+        Healthy   = $ok
+        Diagnosis = $final
+        Steps     = $steps
+        Backup    = $backup
+    }
+}
+
+<#
+.SYNOPSIS
+Restores radios that were disabled by a previous repair.
+#>
+function Invoke-BTFixRollback {
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([object])]
+    param([string]$BackupPath, [string]$LogPath)
+
+    $backup = Get-BTFixLatestBackup -BackupPath $BackupPath
+    if (-not $backup) {
+        Write-BTFixLog -Message 'no backup found — nothing to roll back' -Level 'WARN' -Path $LogPath
+        return [pscustomobject]@{ Changed = $false; Restored = @() }
+    }
+    $restored = @()
+    foreach ($r in $backup.Radios) {
+        $live = Get-PnpDevice -InstanceId $r.InstanceId -ErrorAction SilentlyContinue
+        $nowDisabled = $live -and ((Get-BTFixProperty -InstanceId $r.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode') -eq 22)
+        if ($r.IsDisabled -and $nowDisabled) {
+            Write-BTFixLog -Message "re-enabling $($r.FriendlyName)" -Level 'STEP' -Path $LogPath
+            if ($PSCmdlet.ShouldProcess($r.InstanceId, 'Enable radio')) {
+                Invoke-BTFixPnp -Arguments @('/enable-device', $r.InstanceId) -LogPath $LogPath | Out-Null
+                $restored += $r.InstanceId
+            }
+        }
+    }
+    Invoke-BTFixRescan -LogPath $LogPath
+    Restart-BTFixStack -LogPath $LogPath
+    Write-BTFixLog -Message ("restored: " + ($(if ($restored.Count) { $restored -join ', ' } else { 'nothing to restore' }))) -Level 'OK' -Path $LogPath
+    return [pscustomobject]@{ Changed = ($restored.Count -gt 0); Restored = $restored }
+}
+
+<#
+.SYNOPSIS
+Looks for optional drivers on Windows Update (the "Microsoft Update" driver
+category) and installs the ones that look Bluetooth related.
+#>
+function Invoke-BTFixWindowsUpdate {
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([string])]
+    param([string]$LogPath)
+    $note = 'Windows Update driver search skipped'
+    try {
+        $session = New-Object -ComObject Microsoft.Update.Session
+        $session.ClientApplicationID = 'BTFix'
+        $searcher = $session.CreateUpdateSearcher()
+        $searcher.ServiceID = '7971f918-a847-4430-9279-4a52d1efe18d'
+        $searcher.ServerSelection = 2
+        $result = $searcher.Search("IsInstalled=0 and Type='Driver'")
+        $candidates = @()
+        for ($i = 0; $i -lt $result.Updates.Count; $i++) {
+            $u = $result.Updates.Item($i)
+            Write-BTFixLog -Message ("candidate driver: " + $u.Title) -Path $LogPath
+            if ($u.Title -match 'Bluetooth|CSR|Cambridge|Realtek|Wireless') { $candidates += $u }
+        }
+        if ($candidates.Count -eq 0) {
+            $note = 'Windows Update has no Bluetooth driver for this hardware'
+            Write-BTFixLog -Message $note -Level 'WARN' -Path $LogPath
+            return $note
+        }
+        $coll = New-Object -ComObject Microsoft.Update.UpdateColl
+        foreach ($c in $candidates) { $coll.Add($c) | Out-Null }
+        if ($PSCmdlet.ShouldProcess("$($candidates.Count) driver update(s)", 'Download and install')) {
+            $downloader = $session.CreateUpdateDownloader(); $downloader.Updates = $coll
+            $null = $downloader.Download()
+            $installer = $session.CreateUpdateInstaller(); $installer.Updates = $coll
+            $r = $installer.Install()
+            $note = "installed $($candidates.Count) driver update(s), result $($r.ResultCode)"
+        } else {
+            $note = "would install $($candidates.Count) driver update(s)"
+        }
+    } catch {
+        $note = 'Windows Update search failed: ' + $_.Exception.Message
+        Write-BTFixLog -Message $note -Level 'WARN' -Path $LogPath
+    }
+    Write-BTFixLog -Message $note -Level 'OK' -Path $LogPath
+    return $note
+}
+
+<#
+.SYNOPSIS
+Renders a Markdown diagnostics report (for issues) and writes it to disk.
+#>
+function Write-BTFixReport {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [string]$OutputPath,
+        [string]$LogPath
+    )
+    $d = Get-BTFixDiagnosis
+    $sb = [System.Text.StringBuilder]::new()
+    $null = $sb.AppendLine('# BTFix report')
+    $null = $sb.AppendLine()
+    $null = $sb.AppendLine("- generated: $((Get-Date).ToString('o'))")
+    $null = $sb.AppendLine("- machine: $env:COMPUTERNAME")
+    $null = $sb.AppendLine("- windows: $((Get-CimInstance Win32_OperatingSystem).Caption) $((Get-CimInstance Win32_OperatingSystem).Version)")
+    $null = $sb.AppendLine("- classification: **$($d.Classification)** (confidence $($d.Confidence))")
+    $null = $sb.AppendLine()
+    $null = $sb.AppendLine('## Radios')
+    $null = $sb.AppendLine()
+    $null = $sb.AppendLine('| radio | status | code | driver | internal |')
+    $null = $sb.AppendLine('| --- | --- | --- | --- | --- |')
+    foreach ($r in $d.Radios) {
+        $null = $sb.AppendLine("| $($r.FriendlyName) | $($r.Status) | $($r.ProblemCode) | $($r.DriverProvider) $($r.DriverVersion) | $($r.IsInternal) |")
+    }
+    $null = $sb.AppendLine()
+    $null = $sb.AppendLine('## Evidence')
+    $null = $sb.AppendLine()
+    foreach ($e in $d.Evidence) { $null = $sb.AppendLine("- $e") }
+    $null = $sb.AppendLine()
+    $null = $sb.AppendLine('## Recommended actions')
+    $null = $sb.AppendLine()
+    foreach ($a in $d.RecommendedActions) { $null = $sb.AppendLine("- $a") }
+    $null = $sb.AppendLine()
+    $null = $sb.AppendLine('## Services')
+    $null = $sb.AppendLine()
+    foreach ($s in (Get-Service bthserv, BTAGService -ErrorAction SilentlyContinue)) {
+        $null = $sb.AppendLine("- $($s.Name): $($s.Status) ($($s.StartType))")
+    }
+    $text = $sb.ToString()
+    if ($OutputPath) {
+        $dir = Split-Path -Parent $OutputPath
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        Set-Content -LiteralPath $OutputPath -Value $text -Encoding utf8
+        Write-BTFixLog -Message "report written: $OutputPath" -Level 'OK' -Path $LogPath
+    }
+    return $text
+}
+
+Export-ModuleMember -Function @(
+    'Get-BTFixRadio', 'Get-BTFixDiagnosis', 'New-BTFixBackup', 'Get-BTFixLatestBackup',
+    'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Invoke-BTFixWindowsUpdate',
+    'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot'
+)
