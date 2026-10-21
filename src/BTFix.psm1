@@ -6,6 +6,8 @@
 
 Set-StrictMode -Version Latest
 
+Import-Module (Join-Path $PSScriptRoot 'Health.psm1') 
+
 $script:BluetoothClassGuid = '{E0CBF06C-CD8B-4647-BB8F-263B43F0C0B74}'
 
 function Write-BTFixLog {
@@ -64,26 +66,30 @@ function Get-BTFixProperty {
     return $null
 }
 
-function Get-BTFixAncestors {
+function Test-BTFixInternalRadio {
     <#
     .SYNOPSIS
-    Walks a device's parent chain and reports whether it is wired to a PCI
-    bus (i.e. an on-board adapter) or to a USB root hub (an external dongle).
+    Decides whether a radio is built into the machine or is an external dongle.
+
+    .DESCRIPTION
+    Windows groups devices that share a physical chassis into a "container".
+    An on-board radio shares the container of the computer system
+    ({00000000-0000-0000-FFFF-FFFFFFFFFFFF}), while a USB dongle gets its own
+    container for the port it is plugged into. Topology alone cannot tell
+    them apart, because a built-in radio is also USB-attached internally.
     #>
     [CmdletBinding()]
     [OutputType([bool])]
-    param(
-        [Parameter(Mandatory)][string]$InstanceId,
-        [int]$Depth = 4
-    )
-    $current = Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_Parent'
-    for ($i = 0; $i -lt $Depth -and $current; $i++) {
-        if ($current -like 'PCI\*') { return $true }
-        $next = Get-BTFixProperty -InstanceId $current -KeyName 'DEVPKEY_Device_Parent'
-        if ($next -eq $current) { break }
-        $current = $next
-    }
-    return $false
+    param([Parameter(Mandatory)][string]$InstanceId)
+
+    $systemContainer = '{00000000-0000-0000-FFFF-FFFFFFFFFFFF}'
+    $container = Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_ContainerId'
+    if ($container) { return ([string]$container).ToUpperInvariant() -eq $systemContainer }
+
+    # Fallback for systems that do not expose a container id: a radio whose
+    # parent is a PCI device is on-board.
+    $parent = Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_Parent'
+    return [bool]($parent -like 'PCI\*')
 }
 
 <#
@@ -123,7 +129,7 @@ function Get-BTFixRadio {
             HardwareIds     = $ids
             LocationInfo    = $loc
             Parent          = $parent
-            IsInternal      = (Get-BTFixAncestors -InstanceId $d.InstanceId)
+            IsInternal      = (Test-BTFixInternalRadio -InstanceId $d.InstanceId)
             IsHealthy       = ([string]$d.Status -eq 'OK' -and (-not $problem -or [int]$problem -eq 0))
             IsDisabled      = ([int]$problem -eq 22)
         }
@@ -331,6 +337,8 @@ function Invoke-BTFixRepair {
         [string]$Radio,
         [switch]$PreferInternal,
         [switch]$SearchWindowsUpdate,
+        [switch]$DisableUsbSuspend,
+        [switch]$ForgetStale,
         [string]$BackupPath,
         [string]$LogPath
     )
@@ -341,18 +349,32 @@ function Invoke-BTFixRepair {
     foreach ($e in $diagnosis.Evidence) { Write-BTFixLog -Message $e -Path $LogPath }
 
     if ($diagnosis.Broken.Count -eq 0) {
-        Write-BTFixLog -Message 'nothing to repair — every radio is healthy' -Level 'OK' -Path $LogPath
-        return [pscustomobject]@{ Changed = $false; Diagnosis = $diagnosis; Steps = $steps; Backup = $null }
+        Write-BTFixLog -Message 'every radio is healthy - only the optional repairs remain' -Level 'OK' -Path $LogPath
     }
 
     $backup = New-BTFixBackup -Radios $diagnosis.Radios -BackupPath $BackupPath
     Write-BTFixLog -Message "backup written: $backup" -Level 'OK' -Path $LogPath
 
-    # step 1: restart the stack
+    # step 1: make sure the services the stack needs are running
+    foreach ($s in (Get-BTFixServiceHealth)) {
+        if (-not $s.Present -or $s.Status -eq 'Running') { continue }
+        if ($PSCmdlet.ShouldProcess($s.Name, 'Start service')) {
+            try {
+                Set-Service -Name $s.Name -StartupType Manual -ErrorAction SilentlyContinue
+                Start-Service -Name $s.Name -ErrorAction Stop
+                Write-BTFixLog -Message "started $($s.Label)" -Level 'OK' -Path $LogPath
+                $steps += "started $($s.Name)"
+            } catch {
+                Write-BTFixLog -Message ("could not start " + $s.Name + ": " + $_.Exception.Message) -Level 'WARN' -Path $LogPath
+            }
+        }
+    }
+
+    # step 2: restart the stack so it releases the radios
     Restart-BTFixStack -LogPath $LogPath
     $steps += 'restarted bthserv'
 
-    # step 2: re-enumerate the broken radio
+    # step 3: re-enumerate the broken radio
     foreach ($bad in $diagnosis.Broken) {
         if ($PSCmdlet.ShouldProcess($bad.InstanceId, 'Remove and re-enumerate')) {
             Invoke-BTFixPnp -Arguments @('/remove-device', $bad.InstanceId) -LogPath $LogPath | Out-Null
@@ -364,17 +386,81 @@ function Invoke-BTFixRepair {
 
     $after = Get-BTFixDiagnosis
     if ($after.Broken.Count -gt 0 -and $after.Healthy.Count -gt 0) {
-        # step 3: break the conflict
-        $keep = if ($PreferInternal) { $after.Healthy | Where-Object { $_.IsInternal } | Select-Object -First 1 } else { $null }
-        $disable = if ($keep) { $after.Healthy | Where-Object { -not $_.IsInternal } | Select-Object -First 1 } else { $after.Healthy | Select-Object -First 1 }
-        if ($disable) {
-            Write-BTFixLog -Message "disabling conflicting radio: $($disable.FriendlyName)" -Level 'STEP' -Path $LogPath
-            if ($PSCmdlet.ShouldProcess($disable.InstanceId, 'Disable radio')) {
-                Invoke-BTFixPnp -Arguments @('/disable-device', $disable.InstanceId) -LogPath $LogPath | Out-Null
-                $steps += "disabled $($disable.InstanceId)"
+        # Only one radio can own the Bluetooth stack. The radio the user wants
+        # working wins: the one they pointed at, otherwise the external dongle
+        # (the thing they just plugged in), otherwise the internal adapter.
+        $wanted = $null
+        if ($Radio) {
+            $wanted = $after.Radios | Where-Object { $_.InstanceId -eq $Radio } | Select-Object -First 1
+        }
+        if (-not $wanted) {
+            $wanted = $after.Radios | Where-Object { -not $_.IsInternal } | Select-Object -First 1
+        }
+        if (-not $wanted) {
+            $wanted = $after.Radios | Where-Object { $_.IsInternal } | Select-Object -First 1
+        }
+
+        $brokenIsWanted = $wanted -and ($after.Broken | Where-Object { $_.InstanceId -eq $wanted.InstanceId })
+        if ($brokenIsWanted) {
+            # the wanted radio is broken and another one holds the stack:
+            # park the other one so the wanted radio can take it.
+            $disable = $after.Healthy | Where-Object { $_.InstanceId -ne $wanted.InstanceId } | Select-Object -First 1
+            if ($disable) {
+                Write-BTFixLog -Message "disabling conflicting radio: $($disable.FriendlyName)" -Level 'STEP' -Path $LogPath
+                if ($PSCmdlet.ShouldProcess($disable.InstanceId, 'Disable radio')) {
+                    Invoke-BTFixPnp -Arguments @('/disable-device', $disable.InstanceId) -LogPath $LogPath | Out-Null
+                    $steps += "disabled $($disable.InstanceId)"
+                }
+                Invoke-BTFixRescan -LogPath $LogPath
+                $steps += 'rescanned after conflict break'
             }
-            Invoke-BTFixRescan -LogPath $LogPath
-            $steps += 'rescanned after conflict break'
+        }
+        else {
+            # the working radio is not the one that is broken: leave it alone
+            # and report which one the user should look at.
+            $brokenName = ($after.Broken | Select-Object -First 1).FriendlyName
+            Write-BTFixLog -Message "the working radio is kept; '$brokenName' stays broken (update its driver or pass -PreferInternal)" -Level 'WARN' -Path $LogPath
+            $steps += "kept the working radio; '$brokenName' left as is"
+        }
+    }
+
+    # a wanted radio that is merely disabled must be switched back on
+    foreach ($r in $diagnosis.Radios) {
+        if (-not $r.IsDisabled) { continue }
+        $isWanted = $false
+        if ($Radio) { $isWanted = ($r.InstanceId -eq $Radio) }
+        elseif ($PreferInternal) { $isWanted = $r.IsInternal }
+        else { $isWanted = (-not $r.IsInternal) }
+        if (-not $isWanted) { continue }
+        if ($PSCmdlet.ShouldProcess($r.InstanceId, 'Enable radio')) {
+            Write-BTFixLog -Message "enabling the wanted radio: $($r.FriendlyName)" -Level 'STEP' -Path $LogPath
+            Invoke-BTFixPnp -Arguments @('/enable-device', $r.InstanceId) -LogPath $LogPath | Out-Null
+            $steps += "enabled $($r.InstanceId)"
+        }
+        Invoke-BTFixRescan -LogPath $LogPath
+    }
+
+    # step 5 (optional): stop Windows from powering the dongle down
+    if ($DisableUsbSuspend) {
+        foreach ($r in (Get-BTFixRadio)) {
+            if ($r.IsInternal) { continue }
+            $power = Get-BTFixUsbPowerSetting -InstanceId $r.InstanceId
+            if ($power -and $power.SuspendAllowed) {
+                if (Set-BTFixUsbPowerSetting -Setting $power -LogPath $LogPath) {
+                    $steps += "disabled USB suspend for $($r.FriendlyName)"
+                }
+            }
+        }
+    }
+
+    # step 6 (optional): forget peripherals that are paired but not connected
+    if ($ForgetStale) {
+        foreach ($p in (Get-BTFixPairedDevice)) {
+            if (-not $p.IsNotPresent) { continue }
+            if ($PSCmdlet.ShouldProcess($p.FriendlyName, 'Forget paired device')) {
+                $removed = Remove-BTFixPairedDevice -Name $p.FriendlyName -LogPath $LogPath
+                if ($removed.Count) { $steps += "forgot $($p.FriendlyName)" }
+            }
         }
     }
 
@@ -405,15 +491,27 @@ function Invoke-BTFixRollback {
     param([string]$BackupPath, [string]$LogPath)
 
     $backup = Get-BTFixLatestBackup -BackupPath $BackupPath
-    if (-not $backup) {
-        Write-BTFixLog -Message 'no backup found — nothing to roll back' -Level 'WARN' -Path $LogPath
-        return [pscustomobject]@{ Changed = $false; Restored = @() }
-    }
     $restored = @()
-    foreach ($r in $backup.Radios) {
-        $live = Get-PnpDevice -InstanceId $r.InstanceId -ErrorAction SilentlyContinue
-        $nowDisabled = $live -and ((Get-BTFixProperty -InstanceId $r.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode') -eq 22)
-        if ($r.IsDisabled -and $nowDisabled) {
+
+    if ($backup) {
+        foreach ($r in $backup.Radios) {
+            $live = Get-PnpDevice -InstanceId $r.InstanceId -ErrorAction SilentlyContinue
+            $nowDisabled = $live -and ((Get-BTFixProperty -InstanceId $r.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode') -eq 22)
+            if ($r.IsDisabled -and $nowDisabled) {
+                Write-BTFixLog -Message "re-enabling $($r.FriendlyName)" -Level 'STEP' -Path $LogPath
+                if ($PSCmdlet.ShouldProcess($r.InstanceId, 'Enable radio')) {
+                    Invoke-BTFixPnp -Arguments @('/enable-device', $r.InstanceId) -LogPath $LogPath | Out-Null
+                    $restored += $r.InstanceId
+                }
+            }
+        }
+    }
+    else {
+        # No snapshot from a previous run (e.g. the repair was done by hand) —
+        # fall back to re-enabling every radio that is currently disabled.
+        Write-BTFixLog -Message 'no snapshot found — re-enabling every disabled radio instead' -Level 'WARN' -Path $LogPath
+        foreach ($r in (Get-BTFixRadio)) {
+            if (-not $r.IsDisabled) { continue }
             Write-BTFixLog -Message "re-enabling $($r.FriendlyName)" -Level 'STEP' -Path $LogPath
             if ($PSCmdlet.ShouldProcess($r.InstanceId, 'Enable radio')) {
                 Invoke-BTFixPnp -Arguments @('/enable-device', $r.InstanceId) -LogPath $LogPath | Out-Null
@@ -528,5 +626,5 @@ function Write-BTFixReport {
 Export-ModuleMember -Function @(
     'Get-BTFixRadio', 'Get-BTFixDiagnosis', 'New-BTFixBackup', 'Get-BTFixLatestBackup',
     'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Invoke-BTFixWindowsUpdate',
-    'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot'
+    'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot', 'Test-BTFixInternalRadio'
 )
