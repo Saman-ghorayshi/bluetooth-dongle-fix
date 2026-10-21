@@ -37,6 +37,8 @@ jobs:
       - name: Run PSScriptAnalyzer
         shell: powershell
         run: |
-          $issues = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error,Warning
+          # PSAvoidUsingWriteHost is excluded on purpose: BTFix is a console
+          # tool and prints coloured progress to the host.
+          $issues = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error,Warning -ExcludeRule PSAvoidUsingWriteHost
           $issues | Format-Table -AutoSize
           if ($issues) { Write-Error "PSScriptAnalyzer found $($issues.Count) issue(s)"; exit 1 }

@@ -21,6 +21,8 @@
     Forgets a stale pairing so the earbuds can be paired again.
 #>
 [CmdletBinding(SupportsShouldProcess)]
+[Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
+    Justification = 'BTFix is a console tool: coloured progress output belongs on the host, not in the pipeline.')]
 param(
     [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets')]
     [string]$Mode = 'Check',
