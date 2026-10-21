@@ -1,0 +1,36 @@
+# Byte-compiled files and cache
+*.ps1xml
+[Dd]ebug/
+[Dd]ebugPublic/
+[Dd]ebugSymbols/
+[Dd]ebugRelease/
+[Bb]in/
+[Oo]bj/
+[Rr]elease/
+[Ll]og/
+[Ll]ogs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Visual Studio / VS Code
+.vs/
+.vscode/
+*.code-workspace
+*.swp
+
+# Test / coverage output
+coverage/
+*.coverage
+*.trx
+TestResults/
+
+# OS noise
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local state produced by the tool
+BTFix-state/
+*.log
