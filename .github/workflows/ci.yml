@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Tests (Windows PowerShell 5.1)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run test suite
+        shell: powershell
+        run: .\tests\run-tests.ps1
+
+      - name: Smoke test the CLI (diagnose must not fail)
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          & .\BTFix.ps1 -Mode Diagnose
+          if ($LASTEXITCODE -ne 0) { throw "diagnose exited with $LASTEXITCODE" }
+
+  lint:
+    name: Lint (PSScriptAnalyzer)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install PSScriptAnalyzer
+        shell: powershell
+        run: Install-Module PSScriptAnalyzer -Force -Scope CurrentUser
+
+      - name: Run PSScriptAnalyzer
+        shell: powershell
+        run: |
+          $issues = Invoke-ScriptAnalyzer -Path . -Recurse -Severity Error,Warning
+          $issues | Format-Table -AutoSize
+          if ($issues) { Write-Error "PSScriptAnalyzer found $($issues.Count) issue(s)"; exit 1 }
