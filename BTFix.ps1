@@ -111,7 +111,7 @@ $LogPath = Join-Path $logDir ('btfix-{0}.log' -f (Get-Date -Format 'yyyyMMdd-HHm
 Write-BTFixLog -Message "BTFix $Mode on $env:COMPUTERNAME" -Level 'STEP' -Path $LogPath
 Write-BTFixLog -Message ("log: " + $LogPath) -Path $LogPath
 
-function Show-Findings {
+function Show-Finding {
     param([object[]]$Findings)
     if (-not $Findings -or $Findings.Count -eq 0) {
         Write-Host 'No problems found - the Bluetooth stack looks healthy.' -ForegroundColor Green
@@ -144,7 +144,7 @@ switch ($effectiveMode) {
         }
         Write-Host ''
         Write-Host ("Findings ({0})" -f $findings.Count) -ForegroundColor Cyan
-        Show-Findings -Findings $findings
+        Show-Finding -Findings $findings
         Write-Host ''
         Write-Host 'Run with -Mode Fix to apply the repairs (it snapshots first, and can be undone).' -ForegroundColor DarkGray
     }
@@ -160,7 +160,7 @@ switch ($effectiveMode) {
         }
         if ($result.Backup) { Write-Host "Snapshot (for rollback): $($result.Backup)" -ForegroundColor DarkGray }
         Write-Host ''
-        Show-Findings -Findings (Get-BTFixFinding)
+        Show-Finding -Findings (Get-BTFixFinding)
     }
 
     'Rollback' {

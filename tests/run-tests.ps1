@@ -13,7 +13,7 @@ Import-Module (Join-Path $src 'Chipsets.psm1') -Force
 Import-Module (Join-Path $src 'Health.psm1') -Force
 Import-Module (Join-Path $src 'Findings.psm1') -Force
 
-function New-Radio {
+function Get-TestRadio {
     param(
         [string]$Id,
         [string]$Name = 'Radio',
@@ -40,7 +40,7 @@ function New-Radio {
 
 Describe 'diagnosis' {
     It 'reports Healthy when a single radio works' {
-        $d = Get-BTFixDiagnosis -Inventory @((New-Radio -Id 'USB\A'))
+        $d = Get-BTFixDiagnosis -Inventory @((Get-TestRadio -Id 'USB\A'))
         Assert-Equal 'Healthy' $d.Classification
         Assert-Equal 1 $d.Healthy.Count
         Assert-Equal 0 $d.Broken.Count
@@ -48,8 +48,8 @@ Describe 'diagnosis' {
 
     It 'reports a conflict when one radio is Code 31 and another is fine' {
         $d = Get-BTFixDiagnosis -Inventory @(
-            (New-Radio -Id 'USB\BAD' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error'),
-            (New-Radio -Id 'USB\GOOD' -Name 'Realtek Bluetooth Adapter')
+            (Get-TestRadio -Id 'USB\BAD' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error'),
+            (Get-TestRadio -Id 'USB\GOOD' -Name 'Realtek Bluetooth Adapter')
         )
         Assert-Equal 'RadioConflictOrDriverStartFailure' $d.Classification
         Assert-Equal 'High' $d.Confidence
@@ -58,8 +58,8 @@ Describe 'diagnosis' {
 
     It 'treats problem code 22 as disabled, not broken' {
         $d = Get-BTFixDiagnosis -Inventory @(
-            (New-Radio -Id 'USB\OFF' -Name 'Realtek Bluetooth Adapter' -Code 22 -Status 'Error'),
-            (New-Radio -Id 'USB\ON' -Name 'Generic Bluetooth Radio')
+            (Get-TestRadio -Id 'USB\OFF' -Name 'Realtek Bluetooth Adapter' -Code 22 -Status 'Error'),
+            (Get-TestRadio -Id 'USB\ON' -Name 'Generic Bluetooth Radio')
         )
         Assert-Equal 'HealthyWithDisabledRadio' $d.Classification
         Assert-Equal 0 $d.Broken.Count
@@ -68,7 +68,7 @@ Describe 'diagnosis' {
 
     It 'reports when every radio is disabled' {
         $d = Get-BTFixDiagnosis -Inventory @(
-            (New-Radio -Id 'USB\OFF' -Code 22 -Status 'Error')
+            (Get-TestRadio -Id 'USB\OFF' -Code 22 -Status 'Error')
         )
         Assert-Equal 'AllRadiosDisabled' $d.Classification
         Assert-True ($d.RecommendedActions -join ' ' -match 'Re-enable')
@@ -76,14 +76,14 @@ Describe 'diagnosis' {
 
     It 'classifies a missing driver (code 28)' {
         $d = Get-BTFixDiagnosis -Inventory @(
-            (New-Radio -Id 'USB\NOdrv' -Code 28 -Status 'Error')
+            (Get-TestRadio -Id 'USB\NOdrv' -Code 28 -Status 'Error')
         )
         Assert-Equal 'DriverNotInstalled' $d.Classification
     }
 
     It 'classifies code 10 as cannot start' {
         $d = Get-BTFixDiagnosis -Inventory @(
-            (New-Radio -Id 'USB\X' -Code 10 -Status 'Error')
+            (Get-TestRadio -Id 'USB\X' -Code 10 -Status 'Error')
         )
         Assert-Equal 'DeviceCannotStart' $d.Classification
     }
@@ -99,8 +99,8 @@ Describe 'backups' {
         $dir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-test-' + [guid]::NewGuid().ToString('N'))
         try {
             $radios = @(
-                (New-Radio -Id 'USB\A' -Name 'Realtek Bluetooth Adapter' -Code 22 -Status 'Error'),
-                (New-Radio -Id 'USB\B' -Name 'Generic Bluetooth Radio')
+                (Get-TestRadio -Id 'USB\A' -Name 'Realtek Bluetooth Adapter' -Code 22 -Status 'Error'),
+                (Get-TestRadio -Id 'USB\B' -Name 'Generic Bluetooth Radio')
             )
             $file = New-BTFixBackup -Radios $radios -BackupPath $dir
             Assert-True (Test-Path -LiteralPath $file)
@@ -115,9 +115,9 @@ Describe 'backups' {
     It 'finds the most recent snapshot again' {
         $dir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-test-' + [guid]::NewGuid().ToString('N'))
         try {
-            $null = New-BTFixBackup -Radios @((New-Radio -Id 'USB\A')) -BackupPath $dir
+            $null = New-BTFixBackup -Radios @((Get-TestRadio -Id 'USB\A')) -BackupPath $dir
             Start-Sleep -Seconds 1
-            $null = New-BTFixBackup -Radios @((New-Radio -Id 'USB\B')) -BackupPath $dir
+            $null = New-BTFixBackup -Radios @((Get-TestRadio -Id 'USB\B')) -BackupPath $dir
             $latest = Get-BTFixLatestBackup -BackupPath $dir
             Assert-True ($null -ne $latest)
             Assert-True ($latest.Radios.InstanceId -contains 'USB\B')
@@ -234,8 +234,8 @@ Describe 'health checks' {
 Describe 'findings' {
     It 'flags the dual-radio conflict as auto-fixable' {
         $f = @(Get-BTFixFinding -Inventory @(
-                (New-Radio -Id 'USB\BAD' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error'),
-                (New-Radio -Id 'USB\GOOD' -Name 'Realtek Bluetooth Adapter')
+                (Get-TestRadio -Id 'USB\BAD' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error'),
+                (Get-TestRadio -Id 'USB\GOOD' -Name 'Realtek Bluetooth Adapter')
             ) -NoLive)
         $conflict = @($f | Where-Object { $_.Id -eq 'radio-31' })[0]
         Assert-True ($null -ne $conflict) 'expected a radio-31 finding'
@@ -245,7 +245,7 @@ Describe 'findings' {
 
     It 'explains a missing driver' {
         $f = @(Get-BTFixFinding -Inventory @(
-                (New-Radio -Id 'USB\NOdrv' -Name 'Generic Bluetooth Radio' -Code 28 -Status 'Error')
+                (Get-TestRadio -Id 'USB\NOdrv' -Name 'Generic Bluetooth Radio' -Code 28 -Status 'Error')
             ) -NoLive)
         $row = @($f | Where-Object { $_.Id -eq 'radio-28' })[0]
         Assert-True ($null -ne $row)
@@ -254,7 +254,7 @@ Describe 'findings' {
 
     It 'warns that a blocked driver needs a vendor update' {
         $f = @(Get-BTFixFinding -Inventory @(
-                (New-Radio -Id 'USB\BLOCKED' -Code 48 -Status 'Error')
+                (Get-TestRadio -Id 'USB\BLOCKED' -Code 48 -Status 'Error')
             ) -NoLive)
         $row = @($f | Where-Object { $_.Id -eq 'radio-48' })[0]
         Assert-True ($null -ne $row)
