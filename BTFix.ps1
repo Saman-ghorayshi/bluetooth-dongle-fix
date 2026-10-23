@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
     BTFix — diagnose and repair USB Bluetooth dongles that Windows refuses to
     start (Code 31 / CM_PROB_FAILED_ADD) and the Bluetooth stack problems
@@ -131,7 +131,7 @@ function Show-Finding {
 
 switch ($effectiveMode) {
     'Check' {
-        $findings = Get-BTFixFinding
+        $findings = Get-BTFixFinding -Radio $Radio -PreferInternal:$PreferInternal
         Write-Host ''
         Write-Host 'Bluetooth radios' -ForegroundColor Cyan
         Write-Host '-----------------'
@@ -150,7 +150,7 @@ switch ($effectiveMode) {
     }
 
     'Fix' {
-        $result = Invoke-BTFixRepair -Radio $Radio -PreferInternal -SearchWindowsUpdate:$SearchWindowsUpdate -DisableUsbSuspend:$DisableUsbSuspend -ForgetStale:$ForgetStale -BackupPath $BackupPath -LogPath $LogPath
+        $result = Invoke-BTFixRepair -Radio $Radio -PreferInternal:$PreferInternal -SearchWindowsUpdate:$SearchWindowsUpdate -DisableUsbSuspend:$DisableUsbSuspend -ForgetStale:$ForgetStale -BackupPath $BackupPath -LogPath $LogPath
         Write-Host ''
         foreach ($s in $result.Steps) { Write-Host "  step: $s" -ForegroundColor DarkGray }
         if ($result.Healthy) {
@@ -160,7 +160,7 @@ switch ($effectiveMode) {
         }
         if ($result.Backup) { Write-Host "Snapshot (for rollback): $($result.Backup)" -ForegroundColor DarkGray }
         Write-Host ''
-        Show-Finding -Findings (Get-BTFixFinding)
+        Show-Finding -Findings (Get-BTFixFinding -Radio $Radio -PreferInternal:$PreferInternal)
     }
 
     'Rollback' {

@@ -1,4 +1,4 @@
-﻿# BTFix — Bluetooth radio diagnostics and repair engine.
+# BTFix — Bluetooth radio diagnostics and repair engine.
 #
 # Everything here is side-effect free unless a function explicitly says
 # otherwise; the mutating helpers all support -WhatIf via
@@ -374,11 +374,48 @@ function Invoke-BTFixRepair {
         }
     }
 
-    # step 2: restart the stack so it releases the radios
+    # Determine the wanted radio: the one the user pointed at, otherwise
+    # the external dongle (the thing they plugged in), otherwise the internal adapter.
+    $wanted = $null
+    if ($Radio) {
+        $wanted = $diagnosis.Radios | Where-Object { $_.InstanceId -eq $Radio } | Select-Object -First 1
+    }
+    if (-not $wanted) {
+        if ($PreferInternal) {
+            $wanted = $diagnosis.Radios | Where-Object { $_.IsInternal } | Select-Object -First 1
+            if (-not $wanted) { $wanted = $diagnosis.Radios | Where-Object { -not $_.IsInternal } | Select-Object -First 1 }
+        } else {
+            $wanted = $diagnosis.Radios | Where-Object { -not $_.IsInternal } | Select-Object -First 1
+            if (-not $wanted) { $wanted = $diagnosis.Radios | Where-Object { $_.IsInternal } | Select-Object -First 1 }
+        }
+    }
+
+    # step 2: break any dual-radio conflict before enabling/restarting
+    if ($wanted -and (-not $wanted.IsHealthy -or $wanted.IsDisabled)) {
+        $conflicting = @($diagnosis.Healthy | Where-Object { $_.InstanceId -ne $wanted.InstanceId })
+        foreach ($disable in $conflicting) {
+            Write-BTFixLog -Message "disabling conflicting radio: $($disable.FriendlyName)" -Level 'STEP' -Path $LogPath
+            if ($PSCmdlet.ShouldProcess($disable.InstanceId, 'Disable radio')) {
+                Invoke-BTFixPnp -Arguments @('/disable-device', $disable.InstanceId) -LogPath $LogPath | Out-Null
+                $steps += "disabled $($disable.InstanceId)"
+            }
+        }
+    }
+
+    # step 3: enable the wanted radio if it was disabled
+    if ($wanted -and $wanted.IsDisabled) {
+        Write-BTFixLog -Message "enabling the wanted radio: $($wanted.FriendlyName)" -Level 'STEP' -Path $LogPath
+        if ($PSCmdlet.ShouldProcess($wanted.InstanceId, 'Enable radio')) {
+            Invoke-BTFixPnp -Arguments @('/enable-device', $wanted.InstanceId) -LogPath $LogPath | Out-Null
+            $steps += "enabled $($wanted.InstanceId)"
+        }
+    }
+
+    # step 4: restart the stack so it releases and re-attaches
     Restart-BTFixStack -LogPath $LogPath
     $steps += 'restarted bthserv'
 
-    # step 3: re-enumerate the broken radio
+    # step 5: re-enumerate the broken radio
     foreach ($bad in $diagnosis.Broken) {
         if ($PSCmdlet.ShouldProcess($bad.InstanceId, 'Remove and re-enumerate')) {
             Invoke-BTFixPnp -Arguments @('/remove-device', $bad.InstanceId) -LogPath $LogPath | Out-Null
@@ -501,7 +538,7 @@ function Invoke-BTFixRollback {
         foreach ($r in $backup.Radios) {
             $live = Get-PnpDevice -InstanceId $r.InstanceId -ErrorAction SilentlyContinue
             $nowDisabled = $live -and ((Get-BTFixProperty -InstanceId $r.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode') -eq 22)
-            if ($r.IsDisabled -and $nowDisabled) {
+            if (-not $r.IsDisabled -and $nowDisabled) {
                 Write-BTFixLog -Message "re-enabling $($r.FriendlyName)" -Level 'STEP' -Path $LogPath
                 if ($PSCmdlet.ShouldProcess($r.InstanceId, 'Enable radio')) {
                     Invoke-BTFixPnp -Arguments @('/enable-device', $r.InstanceId) -LogPath $LogPath | Out-Null

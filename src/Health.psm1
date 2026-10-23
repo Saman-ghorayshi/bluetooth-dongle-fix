@@ -1,4 +1,4 @@
-﻿# General health checks that are not about a single radio:
+# General health checks that are not about a single radio:
 #  - the services the Bluetooth stack depends on
 #  - the software radio state (Windows can have the radio switched off)
 #  - paired peripherals that are "not connected" (CM_PROB_PHANTOM / code 45)
@@ -79,7 +79,7 @@ function Get-BTFixPairedDevice {
     param()
     $out = @()
     foreach ($d in (Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue)) {
-        if ($d.InstanceId -notlike 'BTHENUM*') { continue }
+        if ($d.InstanceId -notlike 'BTHENUM*' -and $d.InstanceId -notlike 'BTHLE*') { continue }
         $problem = $null
         try {
             $problem = (Get-PnpDeviceProperty -InstanceId $d.InstanceId -ErrorAction SilentlyContinue |

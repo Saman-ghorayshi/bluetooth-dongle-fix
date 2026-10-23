@@ -1,4 +1,4 @@
-﻿# BTFix test suite.
+# BTFix test suite.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
 #
@@ -259,6 +259,17 @@ Describe 'findings' {
         $row = @($f | Where-Object { $_.Id -eq 'radio-48' })[0]
         Assert-True ($null -ne $row)
         Assert-True ($row.Title -match 'Driver Protection')
+    }
+
+    It 'flags when preferred dongle is disabled while internal radio is active' {
+        $f = @(Get-BTFixFinding -Inventory @(
+                (Get-TestRadio -Id 'USB\DONGLE' -Name 'Generic Bluetooth Radio' -Code 22 -Status 'Error' -Internal $false),
+                (Get-TestRadio -Id 'USB\INTERNAL' -Name 'Realtek Bluetooth Adapter' -Code 0 -Status 'OK' -Internal $true)
+            ) -NoLive)
+        $row = @($f | Where-Object { $_.Id -eq 'radio-conflict-disabled' })[0]
+        Assert-True ($null -ne $row) 'expected radio-conflict-disabled finding'
+        Assert-True $row.AutoFixable
+        Assert-Equal 'High' $row.Severity
     }
 
     It 'reports no radio at all' {

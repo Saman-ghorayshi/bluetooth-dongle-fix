@@ -1,4 +1,4 @@
-﻿# The checklist engine: it combines the radio inventory, the Microsoft problem
+# The checklist engine: it combines the radio inventory, the Microsoft problem
 # code table, the service state, the software radio switch, the paired
 # peripherals and the USB power settings into a prioritized list of findings.
 #
@@ -21,7 +21,9 @@ function Get-BTFixFinding {
     [OutputType([object[]])]
     param(
         [object[]]$Inventory,
-        [switch]$NoLive
+        [switch]$NoLive,
+        [string]$Radio,
+        [switch]$PreferInternal
     )
 
     # An empty array binds as $null in Windows PowerShell, so "no radios at
@@ -55,21 +57,24 @@ function Get-BTFixFinding {
     # Which radio does the user want working? The external dongle by default
     # (that is what people plug in), the internal adapter otherwise.
     $wanted = $null
-    # The whole if-expression is wrapped in @(): an if used as an expression
-    # unrolls a single-element array into a scalar, which breaks .Count.
-    $pool = @(if ($null -ne $Inventory) {
-            @($radios | Where-Object { -not $_.IsInternal })
-        } else {
-            @($radios | Where-Object { -not $_.IsInternal -and $_.IsHealthy })
-        })
-    if ($pool.Count -eq 0) {
-        $pool = @(if ($null -ne $Inventory) {
+    if ($Radio) {
+        $wanted = @($radios | Where-Object { $_.InstanceId -eq $Radio }) | Select-Object -First 1
+    }
+    if (-not $wanted) {
+        $pool = @(if ($PreferInternal) {
                 @($radios | Where-Object { $_.IsInternal })
             } else {
-                @($radios | Where-Object { $_.IsHealthy })
+                @($radios | Where-Object { -not $_.IsInternal })
             })
+        if ($pool.Count -eq 0) {
+            $pool = @(if ($PreferInternal) {
+                    @($radios | Where-Object { -not $_.IsInternal })
+                } else {
+                    @($radios | Where-Object { $_.IsInternal })
+                })
+        }
+        if ($pool.Count -gt 0) { $wanted = $pool[0] }
     }
-    if ($pool.Count -gt 0) { $wanted = $pool[0] }
 
     foreach ($r in $broken) {
         $code = Get-BTFixProblemCode -Code $r.ProblemCode
@@ -82,7 +87,13 @@ function Get-BTFixFinding {
         $severity = 'High'
 
         $isWanted = ($wanted -and $r.InstanceId -eq $wanted.InstanceId)
-        if (-not $isWanted -and $healthy.Count -gt 0) {
+        if ($isWanted -and $code -and $code.Code -eq 31 -and $healthy.Count -gt 0) {
+            $title = 'Two Bluetooth radios are fighting over the stack'
+            $detail += " Another radio ($($healthy[0].FriendlyName)) currently owns the Bluetooth stack, and only one adapter can own it at a time."
+            $fix = "Disable the other radio and re-scan; the dongle then starts cleanly. (Microsoft's advice for code 31 is to update the driver, but on dongles the conflict is the real cause - see docs/troubleshooting.md.)"
+            $auto = $true
+        }
+        elseif (-not $isWanted -and $healthy.Count -gt 0) {
             # A second radio cannot run while another one owns the stack, so
             # this is the expected consequence of the conflict, not a new fault.
             $severity = 'Info'
@@ -114,15 +125,27 @@ function Get-BTFixFinding {
         }
     }
 
-    # --- a radio that we parked earlier ---------------------------------
+    # --- a radio that is disabled ---------------------------------------
     foreach ($r in $disabled) {
-        $findings += [pscustomobject]@{
-            Id = 'radio-disabled'; Severity = 'Info'
-            Title = "Radio '$($r.FriendlyName)' is disabled"
-            Detail = 'A disabled radio is not an error (problem code 22) - it just cannot be used until it is enabled again.'
-            Fix = 'Enable it with .\BTFix.ps1 -Mode Rollback.'
-            AutoFixable = $true
-            Data = @{ Radio = $r }
+        $isWanted = ($wanted -and $r.InstanceId -eq $wanted.InstanceId)
+        if ($isWanted -and $healthy.Count -gt 0) {
+            $findings += [pscustomobject]@{
+                Id = 'radio-conflict-disabled'; Severity = 'High'
+                Title = "The preferred radio '$($r.FriendlyName)' is disabled while '$($healthy[0].FriendlyName)' is active"
+                Detail = "The preferred radio is currently disabled, while another radio owns the Bluetooth stack. Only one radio can own the stack."
+                Fix = "Disable '$($healthy[0].FriendlyName)' and enable '$($r.FriendlyName)' with: .\BTFix.ps1 -Mode Fix"
+                AutoFixable = $true
+                Data = @{ Radio = $r; ConflictingRadio = $healthy[0] }
+            }
+        } else {
+            $findings += [pscustomobject]@{
+                Id = 'radio-disabled'; Severity = 'Info'
+                Title = "Radio '$($r.FriendlyName)' is disabled"
+                Detail = 'A disabled radio is not an error (problem code 22) - it just cannot be used until it is enabled again.'
+                Fix = 'Enable it with .\BTFix.ps1 -Mode Rollback.'
+                AutoFixable = $true
+                Data = @{ Radio = $r }
+            }
         }
     }
 
