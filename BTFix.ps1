@@ -155,6 +155,9 @@ switch ($effectiveMode) {
         foreach ($s in $result.Steps) { Write-Host "  step: $s" -ForegroundColor DarkGray }
         if ($result.Healthy) {
             Write-Host 'All radios are healthy.' -ForegroundColor Green
+        } elseif ($result.RebootRequired) {
+            Write-Host 'Windows disabled the internal adapter, but a computer restart is required to release the hardware.' -ForegroundColor Yellow
+            Write-Host 'Please restart your PC. On boot, the USB dongle will be the only active Bluetooth radio.' -ForegroundColor Cyan
         } else {
             Write-Host 'Some problems remain. See the log and docs/troubleshooting.md.' -ForegroundColor Yellow
         }

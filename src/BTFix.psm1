@@ -510,15 +510,19 @@ function Invoke-BTFixRepair {
     }
 
     $final = Get-BTFixDiagnosis
+    $logContent = if ($LogPath -and (Test-Path -LiteralPath $LogPath)) { Get-Content -LiteralPath $LogPath -Raw } else { '' }
+    $rebootNeeded = ($logContent -match 'System reboot is needed|pending system reboot') -or (($final.Radios | ForEach-Object { $_.ProblemCode }) -contains 14)
     $ok = $final.Broken.Count -eq 0
-    Write-BTFixLog -Message ("final state: " + $(if ($ok) { 'all radios healthy' } else { 'still broken' })) -Level $(if ($ok) { 'OK' } else { 'ERROR' }) -Path $LogPath
+
+    Write-BTFixLog -Message ("final state: " + $(if ($ok) { 'all radios healthy' } elseif ($rebootNeeded) { 'restart required to complete switch' } else { 'still broken' })) -Level $(if ($ok) { 'OK' } elseif ($rebootNeeded) { 'WARN' } else { 'ERROR' }) -Path $LogPath
 
     return [pscustomobject]@{
-        Changed   = $steps.Count -gt 0
-        Healthy   = $ok
-        Diagnosis = $final
-        Steps     = $steps
-        Backup    = $backup
+        Changed        = $steps.Count -gt 0
+        Healthy        = $ok
+        RebootRequired = $rebootNeeded
+        Diagnosis      = $final
+        Steps          = $steps
+        Backup         = $backup
     }
 }
 
