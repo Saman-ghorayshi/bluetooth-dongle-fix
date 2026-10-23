@@ -1,4 +1,4 @@
-﻿# Known Bluetooth chipset families and where to get a working driver.
+# Known Bluetooth chipset families and where to get a working driver.
 #
 # Windows ships a generic Bluetooth driver (bth.inf) that covers most chipsets.
 # When a radio is broken *and* the generic driver cannot start it, the chipset
@@ -15,6 +15,20 @@ $script:ChipsetTable = @(
         Family      = 'CSR / Cambridge Silicon Radio (CSR8510 A10 class)'
         Vendor      = 'Cambridge Silicon Radio / countless rebadges'
         DriverHint  = 'The Windows generic driver is normally sufficient. If the radio still fails with Code 31, it is a dual-radio conflict, not a driver problem.'
+        DriverUrl   = ''
+    },
+    [pscustomobject]@{
+        Pattern     = 'VID_0BDA&PID_8771'
+        Family      = 'Realtek RTL8761B USB 5.0 (TP-Link UB500, UGREEN, Baseus)'
+        Vendor      = 'Realtek'
+        DriverHint  = 'Realtek Bluetooth 5.0 adapter. Windows generic driver works, or install the Realtek/TP-Link vendor driver.'
+        DriverUrl   = 'https://www.tp-link.com/support/download/ub500/'
+    },
+    [pscustomobject]@{
+        Pattern     = 'VID_10D7&PID_B012'
+        Family      = 'Actions Semiconductor ATS2851 USB 5.3'
+        Vendor      = 'Actions'
+        DriverHint  = 'Generic Windows Bluetooth driver handles basic audio; install vendor driver if LE audio is unstable.'
         DriverUrl   = ''
     },
     [pscustomobject]@{
