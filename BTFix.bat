@@ -16,12 +16,13 @@ echo   BTFix: Windows Bluetooth Dongle Conflict & Repair Tool
 echo ========================================================
 echo.
 echo 1. Check status (Read-Only Diagnostics)
-echo 2. Fix conflict: Switch to USB Dongle (Recommended)
+echo 2. Fix conflict: Switch to Superior Radio (Recommended)
 echo 3. Rollback: Restore previously disabled radios
 echo 4. Forget a device (e.g. Haylou / QCY / AirPods)
-echo 5. Exit
+echo 5. Compare Radios (Superiority Benchmark & LMP Specs)
+echo 6. Exit
 echo.
-set /p choice="Choose an option (1-5): "
+set /p choice="Choose an option (1-6): "
 if "%choice%"=="1" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0BTFix.ps1" -Mode Check
     goto done
@@ -39,7 +40,11 @@ if "%choice%"=="4" (
     powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0BTFix.ps1" -Mode Forget -Device "%devname%"
     goto done
 )
-if "%choice%"=="5" exit /b 0
+if "%choice%"=="5" (
+    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0BTFix.ps1" -Mode Compare
+    goto done
+)
+if "%choice%"=="6" exit /b 0
 
 :done
 echo.

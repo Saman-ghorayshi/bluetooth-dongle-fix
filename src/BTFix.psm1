@@ -6,7 +6,8 @@
 
 Set-StrictMode -Version Latest
 
-Import-Module (Join-Path $PSScriptRoot 'Health.psm1') 
+Import-Module (Join-Path $PSScriptRoot 'Health.psm1')
+Import-Module (Join-Path $PSScriptRoot 'Superiority.psm1') 
 
 $script:BluetoothClassGuid = '{E0CBF06C-CD8B-4647-BB8F-263B43F0C0B74}'
 
@@ -375,7 +376,7 @@ function Invoke-BTFixRepair {
     }
 
     # Determine the wanted radio: the one the user pointed at, otherwise
-    # the external dongle (the thing they plugged in), otherwise the internal adapter.
+    # the superior radio detected by the Superiority Engine, otherwise the internal adapter.
     $wanted = $null
     if ($Radio) {
         $wanted = $diagnosis.Radios | Where-Object { $_.InstanceId -eq $Radio } | Select-Object -First 1
@@ -385,8 +386,19 @@ function Invoke-BTFixRepair {
             $wanted = $diagnosis.Radios | Where-Object { $_.IsInternal } | Select-Object -First 1
             if (-not $wanted) { $wanted = $diagnosis.Radios | Where-Object { -not $_.IsInternal } | Select-Object -First 1 }
         } else {
-            $wanted = $diagnosis.Radios | Where-Object { -not $_.IsInternal } | Select-Object -First 1
-            if (-not $wanted) { $wanted = $diagnosis.Radios | Where-Object { $_.IsInternal } | Select-Object -First 1 }
+            try {
+                $sup = Get-BTFixSuperiorRadio -Radios $diagnosis.Radios
+                if ($sup -and $sup.SuperiorRadio) {
+                    $wanted = $sup.SuperiorRadio
+                    Write-BTFixLog -Message "Superiority Engine: selected '$($wanted.FriendlyName)' ($($sup.Reason))" -Level 'INFO' -Path $LogPath
+                }
+            } catch {
+                # fallback
+            }
+            if (-not $wanted) {
+                $wanted = $diagnosis.Radios | Where-Object { -not $_.IsInternal } | Select-Object -First 1
+                if (-not $wanted) { $wanted = $diagnosis.Radios | Where-Object { $_.IsInternal } | Select-Object -First 1 }
+            }
         }
     }
 
@@ -671,5 +683,6 @@ function Write-BTFixReport {
 Export-ModuleMember -Function @(
     'Get-BTFixRadio', 'Get-BTFixDiagnosis', 'New-BTFixBackup', 'Get-BTFixLatestBackup',
     'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Invoke-BTFixWindowsUpdate',
-    'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot', 'Test-BTFixInternalRadio'
+    'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot', 'Test-BTFixInternalRadio',
+    'Get-BTFixLmpVersionName', 'Get-BTFixRadioSpecs', 'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio'
 )

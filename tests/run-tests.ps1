@@ -12,6 +12,7 @@ Import-Module (Join-Path $src 'ProblemCodes.psm1') -Force
 Import-Module (Join-Path $src 'Chipsets.psm1') -Force
 Import-Module (Join-Path $src 'Health.psm1') -Force
 Import-Module (Join-Path $src 'Findings.psm1') -Force
+Import-Module (Join-Path $src 'Superiority.psm1') -Force
 
 function Get-TestRadio {
     param(
@@ -19,7 +20,8 @@ function Get-TestRadio {
         [string]$Name = 'Radio',
         [int]$Code = 0,
         [string]$Status = 'OK',
-        [bool]$Internal = $false
+        [bool]$Internal = $false,
+        [int]$Lmp = 0
     )
     return [pscustomobject]@{
         InstanceId     = $Id
@@ -35,6 +37,7 @@ function Get-TestRadio {
         IsInternal     = $Internal
         IsHealthy      = ($Status -eq 'OK' -and $Code -eq 0)
         IsDisabled     = ($Code -eq 22)
+        LmpVersion     = if ($Lmp -gt 0) { $Lmp } else { $null }
     }
 }
 
@@ -275,6 +278,48 @@ Describe 'findings' {
     It 'reports no radio at all' {
         $f = @(Get-BTFixFinding -Inventory @() -NoLive)
         Assert-Equal 1 @($f | Where-Object { $_.Id -eq 'no-radio' }).Count
+    }
+}
+
+Describe 'superiority evaluation' {
+    It 'maps LMP version numbers to standard Bluetooth specs' {
+        Assert-Equal 'Bluetooth 4.0' (Get-BTFixLmpVersionName -LmpVersion 6)
+        Assert-Equal 'Bluetooth 5.0' (Get-BTFixLmpVersionName -LmpVersion 9)
+        Assert-Equal 'Bluetooth 5.1' (Get-BTFixLmpVersionName -LmpVersion 10)
+        Assert-Equal 'Bluetooth 5.2' (Get-BTFixLmpVersionName -LmpVersion 11)
+        Assert-Equal 'Bluetooth 5.3' (Get-BTFixLmpVersionName -LmpVersion 12)
+        Assert-Equal 'Bluetooth 5.4' (Get-BTFixLmpVersionName -LmpVersion 13)
+        Assert-Equal 'Bluetooth 6.0' (Get-BTFixLmpVersionName -LmpVersion 14)
+    }
+
+    It 'scores external dongle higher than internal radio when specs are equal' {
+        $ext = Get-TestRadio -Id 'USB\EXT' -Name 'USB Dongle' -Internal $false -Lmp 10
+        $int = Get-TestRadio -Id 'USB\INT' -Name 'Internal Radio' -Internal $true -Lmp 10
+        $scoreExt = Get-BTFixRadioScore -Radio $ext
+        $scoreInt = Get-BTFixRadioScore -Radio $int
+        Assert-True ($scoreExt.Score -gt $scoreInt.Score) 'external dongle should outscore internal adapter with same LMP'
+    }
+
+    It 'prefers modern internal adapter over obsolete BT 2.1 external dongle' {
+        $extOld = Get-TestRadio -Id 'USB\OLD' -Name 'Legacy Dongle' -Internal $false -Lmp 4
+        $intNew = Get-TestRadio -Id 'USB\NEW' -Name 'Modern Internal' -Internal $true -Lmp 12
+        $res = Get-BTFixSuperiorRadio -Radios @($extOld, $intNew)
+        Assert-Equal 'USB\NEW' $res.SuperiorRadio.InstanceId
+    }
+
+    It 'selects external BT 5.1 dongle over internal BT 5.2 adapter for dedicated RF clearance' {
+        $ext = Get-TestRadio -Id 'USB\DONGLE' -Name 'Generic Bluetooth Radio' -Internal $false -Lmp 10
+        $int = Get-TestRadio -Id 'USB\INTERNAL' -Name 'Realtek Bluetooth Adapter' -Internal $true -Lmp 11
+        $res = Get-BTFixSuperiorRadio -Radios @($ext, $int)
+        Assert-Equal 'USB\DONGLE' $res.SuperiorRadio.InstanceId
+        Assert-True ($res.WinnerScore.Score -gt $res.RunnerUpScore.Score)
+    }
+
+    It 'handles single radio gracefully' {
+        $single = Get-TestRadio -Id 'USB\SOLO' -Name 'Sole Radio'
+        $res = Get-BTFixSuperiorRadio -Radios @($single)
+        Assert-Equal 'USB\SOLO' $res.SuperiorRadio.InstanceId
+        Assert-Match 'Only one' $res.Reason
     }
 }
 

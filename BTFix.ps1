@@ -24,7 +24,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
     Justification = 'BTFix is a console tool: coloured progress output belongs on the host, not in the pipeline.')]
 param(
-    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets')]
+    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare')]
     [string]$Mode = 'Check',
 
     # Restrict the work to this radio (instance id), e.g.
@@ -61,6 +61,7 @@ Import-Module (Join-Path $PSScriptRoot 'src\Findings.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'src\Health.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'src\Chipsets.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'src\ProblemCodes.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'src\Superiority.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'src\BTFix.psm1') -Force
 
 # ---------------------------------------------------------------- elevation
@@ -142,6 +143,11 @@ switch ($effectiveMode) {
             $kind = if ($r.IsInternal) { 'internal' } else { 'external' }
             Write-Host ("  {0,-34} {1,-22} {2,-9} {3}" -f $r.FriendlyName, $r.InstanceId, $kind, $state)
         }
+        if ($radios.Count -gt 1) {
+            $comp = Get-BTFixSuperiorRadio -Radios $radios
+            Write-Host ''
+            Write-Host ("  Superior radio detected: {0} ({1}/100 pts) - run with -Mode Compare for benchmark" -f $comp.SuperiorRadio.FriendlyName, $comp.WinnerScore.Score) -ForegroundColor DarkCyan
+        }
         Write-Host ''
         Write-Host ("Findings ({0})" -f $findings.Count) -ForegroundColor Cyan
         Show-Finding -Findings $findings
@@ -208,6 +214,34 @@ switch ($effectiveMode) {
         $text = Write-BTFixReport -OutputPath $out -LogPath $LogPath
         Write-Host $text
         Write-Host "Report written to $out" -ForegroundColor Green
+    }
+
+    'Compare' {
+        $radios = @(Get-BTFixRadio)
+        if ($radios.Count -eq 0) {
+            Write-Host 'No Bluetooth radios detected.' -ForegroundColor Yellow
+            break
+        }
+        Write-Host ''
+        Write-Host 'Bluetooth Radio Superiority Benchmark' -ForegroundColor Cyan
+        Write-Host '-------------------------------------' -ForegroundColor Cyan
+        $comp = Get-BTFixSuperiorRadio -Radios $radios
+        foreach ($eval in $comp.Scores) {
+            $r = $eval.Radio
+            $isSup = ($r.InstanceId -eq $comp.SuperiorRadio.InstanceId)
+            $tag = if ($isSup) { '[SUPERIOR *]' } else { '            ' }
+            $tagColor = if ($isSup) { 'Green' } else { 'DarkGray' }
+            Write-Host ''
+            Write-Host ("  {0} {1} ({2})" -f $tag, $r.FriendlyName, $eval.BluetoothVersion) -ForegroundColor $tagColor
+            Write-Host ("      Hardware ID : {0}" -f ($r.HardwareIds -join ', ')) -ForegroundColor DarkGray
+            Write-Host ("      Placement   : {0}" -f $(if ($r.IsInternal) { 'Internal (Laptop Motherboard)' } else { 'External (USB Dongle)' })) -ForegroundColor White
+            Write-Host ("      Total Score : {0}/100" -f $eval.Score) -ForegroundColor $(if ($isSup) { 'Green' } else { 'Yellow' })
+            foreach ($fact in $eval.Factors) {
+                Write-Host ("        + {0}" -f $fact) -ForegroundColor DarkGray
+            }
+        }
+        Write-Host ''
+        Write-Host "Recommendation: $($comp.Reason)" -ForegroundColor Cyan
     }
 }
 

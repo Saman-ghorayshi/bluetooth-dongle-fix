@@ -27,14 +27,22 @@ This tool finds the real cause and fixes it — reversibly.
 
 ## Quick start
 
+### Double-Click Launchers (No CLI Needed)
+* **`BTFix.bat`**: Interactive text menu (Check, Fix, Rollback, Forget device, Compare Radios).
+* **`Run-Fix-As-Admin.bat`**: One-click auto-elevating repair shortcut.
+
+### PowerShell CLI
 ```powershell
 # 1. see what is wrong (safe, read-only)
 .\BTFix.ps1
 
-# 2. fix it (prompts for elevation)
+# 2. benchmark & compare all radios to find which is superior
+.\BTFix.ps1 -Mode Compare
+
+# 3. fix conflict (auto-detects superior radio and parks the conflicting one)
 .\BTFix.ps1 -Mode Fix
 
-# 3. not what you wanted? go back
+# 4. not what you wanted? go back
 .\BTFix.ps1 -Mode Rollback
 ```
 
@@ -43,11 +51,21 @@ This tool finds the real cause and fixes it — reversibly.
 | Mode | What happens | Needs admin |
 | --- | --- | --- |
 | `Check` (default) | Runs every check and prints prioritized findings: what is wrong, why it matters, how to fix it, and whether BTFix can fix it itself. **Read-only.** | no |
-| `Fix` | Snapshots the state, then applies the repairs that apply. | yes |
+| `Compare` | Evaluates LMP specs (Bluetooth 4.0 to 6.0), antenna placement, RF clearance, and hardware reliability, scoring and ranking all radios out of 100. | no |
+| `Fix` | Snapshots the state, auto-selects the superior radio, and applies repairs. | yes |
 | `Rollback` | Restores the state saved by the last `Fix` (re-enables the radios it disabled). | yes |
 | `Forget` | Forgets a paired peripheral so it can be paired again. | yes |
 | `Chipsets` | Prints the chipset/driver guidance table. | no |
 | `Report` | Writes a Markdown + JSON diagnostics bundle for a bug report. | no |
+
+## Superiority Benchmark Engine
+
+Windows does not support running multiple active Bluetooth host radios simultaneously. When an external dongle is plugged in alongside an internal motherboard adapter, Windows locks onto one and blocks the second with Code 31.
+
+BTFix's **Superiority Engine** eliminates guesswork:
+* **LMP Version Inspection**: Queries `DEVPKEY_Bluetooth_RadioLmpVersion` and HCI properties to map the exact Bluetooth spec (from Bluetooth 4.0 up to Bluetooth 5.4 / 6.0).
+* **RF Environment & Antenna Clearance**: Scores external USB dongles higher because dedicated antennas outside the laptop chassis avoid internal Wi-Fi 2.4GHz coexistence time-slicing and metal Faraday cage shielding.
+* **Auto-Selection**: In `-Mode Fix`, BTFix automatically prioritizes and activates the superior radio unless overridden by `-Radio` or `-PreferInternal`.
 
 ## The repair pipeline
 
