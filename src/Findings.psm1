@@ -53,6 +53,17 @@ function Get-BTFixFinding {
         }
     }
 
+    # --- single radio is disabled (fail-safe when an external dongle was unplugged) ---
+    if ($radios.Count -eq 1 -and $disabled.Count -eq 1) {
+        $rName = $disabled[0].FriendlyName
+        $findings += [pscustomobject]@{
+            Id = 'single-radio-disabled'; Severity = 'High'; Title = 'The only Bluetooth radio is currently disabled'
+            Detail = "Windows has only one Bluetooth radio ($rName), but it is disabled (problem code 22) - possibly left parked after an external dongle was unplugged."
+            Fix = 'Re-enable the radio: .\BTFix.ps1 -Mode Fix'
+            AutoFixable = $true
+        }
+    }
+
     # --- the classic dongle problem -------------------------------------
     # Which radio does the user want working? The external dongle by default
     # (that is what people plug in), the internal adapter otherwise.
@@ -61,19 +72,23 @@ function Get-BTFixFinding {
         $wanted = @($radios | Where-Object { $_.InstanceId -eq $Radio }) | Select-Object -First 1
     }
     if (-not $wanted) {
-        $pool = @(if ($PreferInternal) {
-                @($radios | Where-Object { $_.IsInternal })
-            } else {
-                @($radios | Where-Object { -not $_.IsInternal })
-            })
-        if ($pool.Count -eq 0) {
+        if ($radios.Count -eq 1) {
+            $wanted = $radios[0]
+        } else {
             $pool = @(if ($PreferInternal) {
-                    @($radios | Where-Object { -not $_.IsInternal })
-                } else {
                     @($radios | Where-Object { $_.IsInternal })
+                } else {
+                    @($radios | Where-Object { -not $_.IsInternal })
                 })
+            if ($pool.Count -eq 0) {
+                $pool = @(if ($PreferInternal) {
+                        @($radios | Where-Object { -not $_.IsInternal })
+                    } else {
+                        @($radios | Where-Object { $_.IsInternal })
+                    })
+            }
+            if ($pool.Count -gt 0) { $wanted = $pool[0] }
         }
-        if ($pool.Count -gt 0) { $wanted = $pool[0] }
     }
 
     foreach ($r in $broken) {

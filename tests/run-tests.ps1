@@ -279,6 +279,16 @@ Describe 'findings' {
         $f = @(Get-BTFixFinding -Inventory @() -NoLive)
         Assert-Equal 1 @($f | Where-Object { $_.Id -eq 'no-radio' }).Count
     }
+
+    It 'detects when only one radio exists and it was left disabled' {
+        $f = @(Get-BTFixFinding -Inventory @(
+                (Get-TestRadio -Id 'USB\SOLO_DISABLED' -Name 'Realtek Bluetooth Adapter' -Code 22 -Status 'Error' -Internal $true)
+            ) -NoLive)
+        $row = @($f | Where-Object { $_.Id -eq 'single-radio-disabled' })[0]
+        Assert-True ($null -ne $row) 'expected single-radio-disabled finding'
+        Assert-True $row.AutoFixable
+        Assert-Equal 'High' $row.Severity
+    }
 }
 
 Describe 'superiority evaluation' {

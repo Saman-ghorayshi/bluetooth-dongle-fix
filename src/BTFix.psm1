@@ -289,6 +289,19 @@ function Invoke-BTFixPnp {
         [Parameter(Mandatory)][string[]]$Arguments,
         [string]$LogPath
     )
+    # Safety guard: ensure mutating commands only target Bluetooth USB devices
+    if ($Arguments.Count -ge 2 -and $Arguments[0] -in @('/disable-device', '/enable-device', '/remove-device')) {
+        $targetId = $Arguments[1]
+        try {
+            $dev = Get-PnpDevice -InstanceId $targetId -ErrorAction SilentlyContinue
+            if ($dev -and $dev.Class -ne 'Bluetooth') {
+                Write-BTFixLog -Message "SAFETY GUARD: Refusing to mutate non-Bluetooth device '$targetId' (Class: $($dev.Class))" -Level 'ERROR' -Path $LogPath
+                throw "Safety check blocked action on non-Bluetooth device: $targetId"
+            }
+        } catch {
+            Write-BTFixLog -Message "Safety check warning: $($_.Exception.Message)" -Level 'WARN' -Path $LogPath
+        }
+    }
     $out = & pnputil @Arguments 2>&1 | Out-String
     Write-BTFixLog -Message ("pnputil " + ($Arguments -join ' ')) -Level 'STEP' -Path $LogPath
     foreach ($line in ($out -split "`r?`n")) {
@@ -483,6 +496,8 @@ function Invoke-BTFixRepair {
         $isWanted = $false
         if ($Radio) { $isWanted = ($r.InstanceId -eq $Radio) }
         elseif ($PreferInternal) { $isWanted = $r.IsInternal }
+        elseif ($diagnosis.Radios.Count -eq 1) { $isWanted = $true }
+        elseif ($wanted) { $isWanted = ($r.InstanceId -eq $wanted.InstanceId) }
         else { $isWanted = (-not $r.IsInternal) }
         if (-not $isWanted) { continue }
         if ($PSCmdlet.ShouldProcess($r.InstanceId, 'Enable radio')) {
