@@ -333,6 +333,14 @@ Describe 'superiority evaluation' {
         Assert-Equal 'USB\SOLO' $res.SuperiorRadio.InstanceId
         Assert-Match 'Only one' $res.Reason
     }
+
+    It 'heavily penalizes dongles with blocked drivers (code 48) so working internal radio wins' {
+        $extBlocked = Get-TestRadio -Id 'USB\BLOCKED' -Name 'Broken Dongle' -Code 48 -Status 'Error' -Internal $false -Lmp 10
+        $intWorking = Get-TestRadio -Id 'USB\INTERNAL' -Name 'Working Internal' -Code 0 -Status 'OK' -Internal $true -Lmp 10
+        $res = Get-BTFixSuperiorRadio -Radios @($extBlocked, $intWorking)
+        Assert-Equal 'USB\INTERNAL' $res.SuperiorRadio.InstanceId
+        Assert-True ($res.WinnerScore.Score -gt $res.RunnerUpScore.Score)
+    }
 }
 
 Write-Summary

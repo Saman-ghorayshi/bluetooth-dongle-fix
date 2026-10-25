@@ -148,8 +148,22 @@ function Get-BTFixRadioScore {
         $score += 30
         $factors += "External USB Dongle (Dedicated antenna, free from laptop chassis RF shielding and Wi-Fi combo interference)"
     } else {
-        $score += 15
-        $factors += "Internal Adapter (Integrated, shares 2.4GHz antenna with Wi-Fi module)"
+        $isMobile = $true
+        try {
+            $cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction SilentlyContinue
+            if ($cs -and $null -ne $cs.PCSystemType) {
+                $isMobile = ($cs.PCSystemType -in @(2, 8))
+            }
+        } catch {
+            $isMobile = $true
+        }
+        if (-not $isMobile -and $lmp -and $lmp -ge 11) {
+            $score += 28
+            $factors += "Internal PCIe Card (Desktop chassis with dedicated RF clearance)"
+        } else {
+            $score += 15
+            $factors += "Internal Adapter (Integrated, shares 2.4GHz antenna with Wi-Fi module)"
+        }
     }
 
     # Criterion 3: Hardware Health (up to 15 points)
@@ -162,6 +176,10 @@ function Get-BTFixRadioScore {
     } elseif ($Radio.ProblemCode -eq 31) {
         $score += 10
         $factors += "Radio is temporarily blocked by single-radio conflict (Code 31)"
+    } elseif ($Radio.ProblemCode -in @(28, 43, 48, 10)) {
+        # Severe driver or hardware failure (Code 48=blocked, 28=no driver, 43/10=cannot start)
+        $score -= 40
+        $factors += "Radio reported critical error code $($Radio.ProblemCode) (Driver missing, blocked, or device cannot start)"
     } else {
         $factors += "Radio reported problem code $($Radio.ProblemCode)"
     }
