@@ -218,8 +218,10 @@ Describe 'chipset guidance' {
 Describe 'health checks' {
     It 'reports the services the stack needs' {
         $services = Get-BTFixServiceHealth
-        Assert-Equal 3 $services.Count
+        Assert-Equal 5 $services.Count
         Assert-Equal 1 @($services | Where-Object { $_.Name -eq 'bthserv' }).Count
+        Assert-Equal 1 @($services | Where-Object { $_.Name -eq 'AudioEndpointBuilder' }).Count
+        Assert-Equal 1 @($services | Where-Object { $_.Name -eq 'BTAGService' }).Count
     }
 
     It 'can read the software radio switch' {

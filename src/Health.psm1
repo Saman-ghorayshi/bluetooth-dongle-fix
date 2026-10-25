@@ -8,6 +8,8 @@ Set-StrictMode -Version Latest
 
 $script:BluetoothServices = @(
     [pscustomobject]@{ Name = 'bthserv'; Label = 'Bluetooth Support Service'; Critical = $true }
+    [pscustomobject]@{ Name = 'BTAGService'; Label = 'Bluetooth Audio Gateway Service'; Critical = $false }
+    [pscustomobject]@{ Name = 'AudioEndpointBuilder'; Label = 'Windows Audio Endpoint Builder'; Critical = $false }
     [pscustomobject]@{ Name = 'DeviceAssociationService'; Label = 'Device Association Service'; Critical = $false }
     [pscustomobject]@{ Name = 'DeviceInstall'; Label = 'Device Install Service'; Critical = $false }
 )

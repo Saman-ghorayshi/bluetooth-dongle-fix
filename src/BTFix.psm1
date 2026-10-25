@@ -328,6 +328,28 @@ function Restart-BTFixStack {
     }
 }
 
+function Restart-BTFixAudioStack {
+    [CmdletBinding(SupportsShouldProcess)]
+    param([string]$LogPath)
+    if (-not (Test-BTFixAdministrator)) { return }
+    if ($PSCmdlet.ShouldProcess('AudioEndpointBuilder', 'Refresh audio endpoint graph')) {
+        try {
+            $btag = Get-Service -Name 'BTAGService' -ErrorAction SilentlyContinue
+            if ($btag -and $btag.Status -eq 'Running') {
+                Restart-Service -Name 'BTAGService' -Force -ErrorAction SilentlyContinue
+                Write-BTFixLog -Message 'restarted BTAGService (Bluetooth Audio Gateway)' -Level 'OK' -Path $LogPath
+            }
+            $aeb = Get-Service -Name 'AudioEndpointBuilder' -ErrorAction SilentlyContinue
+            if ($aeb -and $aeb.Status -eq 'Running') {
+                Restart-Service -Name 'AudioEndpointBuilder' -Force -ErrorAction SilentlyContinue
+                Write-BTFixLog -Message 'refreshed AudioEndpointBuilder (re-mapped Bluetooth audio endpoints)' -Level 'OK' -Path $LogPath
+            }
+        } catch {
+            Write-BTFixLog -Message ("audio endpoint refresh: " + $_.Exception.Message) -Level 'WARN' -Path $LogPath
+        }
+    }
+}
+
 function Invoke-BTFixRescan {
     [CmdletBinding(SupportsShouldProcess)]
     param([string]$LogPath)
@@ -536,6 +558,10 @@ function Invoke-BTFixRepair {
         $steps += (Invoke-BTFixWindowsUpdate -LogPath $LogPath)
     }
 
+    # step 7: refresh audio endpoints so Bluetooth earbuds bind immediately to Output Devices
+    Restart-BTFixAudioStack -LogPath $LogPath
+    $steps += 'refreshed audio endpoint builder' 
+
     $final = Get-BTFixDiagnosis
     $logContent = if ($LogPath -and (Test-Path -LiteralPath $LogPath)) { Get-Content -LiteralPath $LogPath -Raw } else { '' }
     $rebootNeeded = ($logContent -match 'System reboot is needed|pending system reboot') -or (($final.Radios | ForEach-Object { $_.ProblemCode }) -contains 14)
@@ -696,7 +722,7 @@ function Write-BTFixReport {
 }
 
 Export-ModuleMember -Function @(
-    'Get-BTFixRadio', 'Get-BTFixDiagnosis', 'New-BTFixBackup', 'Get-BTFixLatestBackup',
+    'Get-BTFixRadio', 'Get-BTFixDiagnosis', 'New-BTFixBackup', 'Get-BTFixLatestBackup', 'Restart-BTFixAudioStack',
     'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Invoke-BTFixWindowsUpdate',
     'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot', 'Test-BTFixInternalRadio',
     'Get-BTFixLmpVersionName', 'Get-BTFixRadioSpecs', 'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio'
