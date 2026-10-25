@@ -77,22 +77,31 @@ function Test-BTFixInternalRadio {
     Decides whether a radio is built into the machine or is an external dongle.
 
     .DESCRIPTION
-    Windows groups devices that share a physical chassis into a "container".
-    An on-board radio shares the container of the computer system
-    ({00000000-0000-0000-FFFF-FFFFFFFFFFFF}), while a USB dongle gets its own
-    container for the port it is plugged into. Topology alone cannot tell
-    them apart, because a built-in radio is also USB-attached internally.
+    1. Checks PnP Removable capabilities (CM_DEVCAP_REMOVABLE = bit 4). External USB dongles are always removable.
+    2. Checks device Container ID against Windows System Chassis Container ({00000000-0000-0000-FFFF-FFFFFFFFFFFF}).
+    3. Fallback checks parent bus topology (PCI-attached parents are internal).
     #>
     [CmdletBinding()]
     [OutputType([bool])]
     param([Parameter(Mandatory)][string]$InstanceId)
 
+    # 1. Removable capability check: external dongles report CM_DEVCAP_REMOVABLE (0x04)
+    try {
+        $cap = Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_Capabilities'
+        if ($null -ne $cap) {
+            $isRemovable = [bool]([int]$cap -band 4)
+            if ($isRemovable) { return $false }
+        }
+    } catch {
+        Write-Verbose "Could not query capabilities for $InstanceId"
+    }
+
+    # 2. Container ID check: internal radios share the computer chassis container
     $systemContainer = '{00000000-0000-0000-FFFF-FFFFFFFFFFFF}'
     $container = Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_ContainerId'
     if ($container) { return ([string]$container).ToUpperInvariant() -eq $systemContainer }
 
-    # Fallback for systems that do not expose a container id: a radio whose
-    # parent is a PCI device is on-board.
+    # 3. Fallback for systems that do not expose a container id: parent PCI bus
     $parent = Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_Parent'
     return [bool]($parent -like 'PCI\*')
 }

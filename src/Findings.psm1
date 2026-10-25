@@ -87,7 +87,15 @@ function Get-BTFixFinding {
                         @($radios | Where-Object { $_.IsInternal })
                     })
             }
-            if ($pool.Count -gt 0) { $wanted = $pool[0] }
+            if ($pool.Count -gt 0) {
+                # If multiple pool candidates exist, prioritize the one suffering from Code 31 conflict
+                $conflictCandidate = @($pool | Where-Object { $_.ProblemCode -eq 31 }) | Select-Object -First 1
+                if ($conflictCandidate) {
+                    $wanted = $conflictCandidate
+                } else {
+                    $wanted = $pool[0]
+                }
+            }
         }
     }
 

@@ -204,9 +204,10 @@ Describe 'chipset guidance' {
         Assert-True (@($m)[0].Family -match 'CSR')
     }
 
-    It 'recognises Intel and Realtek ids' {
+    It 'recognises Intel, Realtek, and MediaTek ids' {
         Assert-True (@(Get-BTFixChipset -HardwareId 'USB\VID_8087&PID_0032')[0].Family -match 'Intel')
         Assert-True (@(Get-BTFixChipset -HardwareId 'USB\VID_0BDA&PID_4853')[0].Family -match 'Realtek')
+        Assert-True (@(Get-BTFixChipset -HardwareId 'USB\VID_0E8D&PID_7961')[0].Family -match 'MediaTek')
     }
 
     It 'says so when it does not know the chipset' {
@@ -239,13 +240,43 @@ Describe 'health checks' {
 Describe 'findings' {
     It 'flags the dual-radio conflict as auto-fixable' {
         $f = @(Get-BTFixFinding -Inventory @(
-                (Get-TestRadio -Id 'USB\BAD' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error'),
-                (Get-TestRadio -Id 'USB\GOOD' -Name 'Realtek Bluetooth Adapter')
+                (Get-TestRadio -Id 'USB\BAD' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error' -Internal $false),
+                (Get-TestRadio -Id 'USB\GOOD' -Name 'Realtek Bluetooth Adapter' -Internal $true)
             ) -NoLive)
         $conflict = @($f | Where-Object { $_.Id -eq 'radio-31' })[0]
         Assert-True ($null -ne $conflict) 'expected a radio-31 finding'
         Assert-True $conflict.AutoFixable
         Assert-True ($conflict.Title -match 'fighting')
+    }
+
+    It 'flags dual-radio conflict as auto-fixable even when internal radio is listed first in enumeration' {
+        $f = @(Get-BTFixFinding -Inventory @(
+                (Get-TestRadio -Id 'USB\GOOD' -Name 'Realtek Bluetooth Adapter' -Internal $true),
+                (Get-TestRadio -Id 'USB\BAD' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error' -Internal $false)
+            ) -NoLive)
+        $conflict = @($f | Where-Object { $_.Id -eq 'radio-31' })[0]
+        Assert-True ($null -ne $conflict) 'expected a radio-31 finding regardless of enumeration order'
+        Assert-True $conflict.AutoFixable
+    }
+
+    It 'flags dual-radio conflict as auto-fixable even if internal detection is ambiguous (order-independent)' {
+        $f = @(Get-BTFixFinding -Inventory @(
+                (Get-TestRadio -Id 'USB\GOOD' -Name 'Radio A' -Internal $false),
+                (Get-TestRadio -Id 'USB\BAD' -Name 'Radio B' -Code 31 -Status 'Error' -Internal $false)
+            ) -NoLive)
+        $conflict = @($f | Where-Object { $_.Id -eq 'radio-31' })[0]
+        Assert-True ($null -ne $conflict) 'expected a radio-31 finding even when both have IsInternal=false and good is listed first'
+        Assert-True $conflict.AutoFixable
+    }
+
+    It 'honors -PreferInternal when breaking conflict' {
+        $f = @(Get-BTFixFinding -Inventory @(
+                (Get-TestRadio -Id 'USB\DONGLE' -Name 'Generic Bluetooth Radio' -Internal $false),
+                (Get-TestRadio -Id 'USB\INTERNAL' -Name 'Realtek Bluetooth Adapter' -Code 31 -Status 'Error' -Internal $true)
+            ) -PreferInternal -NoLive)
+        $conflict = @($f | Where-Object { $_.Id -eq 'radio-31' })[0]
+        Assert-True ($null -ne $conflict)
+        Assert-True $conflict.AutoFixable
     }
 
     It 'explains a missing driver' {

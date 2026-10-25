@@ -47,9 +47,9 @@ $script:ChipsetTable = @(
     },
     [pscustomobject]@{
         Pattern     = 'VID_8087&'
-        Family      = 'Intel AX211 / AX201 / AX210'
+        Family      = 'Intel Wireless Bluetooth (AX200 / AX201 / AX210 / AX211 / BE200)'
         Vendor      = 'Intel'
-        DriverHint  = 'Install the Intel Bluetooth driver from the laptop OEM; Windows Update often carries an older one that fails with 0x80070426.'
+        DriverHint  = 'Intel Wireless Bluetooth. If device crashes with Code 10/43 after sleep, disable USB Selective Suspend in Device Manager.'
         DriverUrl   = 'https://www.intel.com/content/www/us/en/support/detect.html'
     },
     [pscustomobject]@{
@@ -60,10 +60,10 @@ $script:ChipsetTable = @(
         DriverUrl   = 'https://www.atheros.com'
     },
     [pscustomobject]@{
-        Pattern     = 'VID_0EAC&PID_&'
-        Family      = 'MediaTek / Broadcom combo dongles'
+        Pattern     = 'VID_0E8D&'
+        Family      = 'MediaTek MT7921 / MT7922 Wi-Fi 6/6E Bluetooth'
         Vendor      = 'MediaTek'
-        DriverHint  = 'MediaTek combo dongles usually need the vendor INF; a driver from another chipset can break the Wi-Fi half.'
+        DriverHint  = 'MediaTek combo card (common on AMD Ryzen laptops). Use OEM driver; if Bluetooth disappears after sleep, disable Fast Startup.'
         DriverUrl   = 'https://www.mediatek.com'
     },
     [pscustomobject]@{
