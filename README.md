@@ -26,7 +26,7 @@ irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/main/
 
 > **What this does:**
 > 1. Installs the latest BTFix suite into `%LOCALAPPDATA%\BTFix`.
-> 2. Adds `btfix` to your `PATH` (executable anywhere from Terminal or CMD).
+> 2. Adds `btfix` and `btfix-gui` to your `PATH` (executable anywhere from Terminal or CMD).
 > 3. Creates a **"Bluetooth Dongle Fix"** desktop shortcut.
 > 4. Launches the modern dark-themed GUI automatically.
 
@@ -36,36 +36,13 @@ irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/main/
 
 BTFix includes a native Fluent dark-mode graphical user interface built on Windows Presentation Framework (WPF XAML) with **zero external packages or runtime installations**.
 
-```text
- ┌────────────────────────────────────────────────────────────────────────┐
- │ 🎧 Bluetooth Dongle Fix & Benchmark                         v2.0 [🛡️]  │
- │ Dual-Radio Conflict Resolver & Superiority Benchmark Engine            │
- ├────────────────────────────────────────────────────────────────────────┤
- │ ⚡ CRITICAL: Dual-Radio Conflict Detected (Dongle locked in Code 31)   │
- ├──────────────────────────────────────┬─────────────────────────────────┤
- │ 📡 Bluetooth Host Radios (2 found)   │ 🎧 Audio & Peripherals          │
- │ ┌──────────────────────────────────┐ │ ┌─────────────────────────────┐ │
- │ │ Generic Bluetooth Radio (CSR)    │ │ │ Haylou W1     🟢 Connected  │ │
- │ │ External USB Dongle              │ │ └─────────────────────────────┘ │
- │ │ Bluetooth 5.1 (LMP 10)           │ │ ┌─────────────────────────────┐ │
- │ │ 🔴 Conflict (Code 31)            │ │ │ AirPods Pro   ⚪ Paired     │ │
- │ │ Score: 95/100 🏆 Superior Candidate│ └─────────────────────────────┘ │
- │ ├──────────────────────────────────┤                                   │
- │ │ Realtek Bluetooth Adapter        │                                   │
- │ │ Motherboard Internal Card        │                                   │
- │ │ Bluetooth 5.2 (LMP 11)           │                                   │
- │ │ 🟢 Active (Code 0)               │                                   │
- │ │ Score: 85/100 (Runner-up)        │                                   │
- │ └──────────────────────────────────┘                                   │
- ├────────────────────────────────────────────────────────────────────────┤
- │ [⚡ One-Click Auto-Fix] [🔍 Scan] [🎧 Fix Audio Drops] [🔄 Rollback]   │
- ├────────────────────────────────────────────────────────────────────────┤
- │ 📜 Live Activity Log: [OK] Adapter parked | [ACTION] Rebuilding audio..│
- └────────────────────────────────────────────────────────────────────────┘
-```
+<p align="center">
+  <img src="docs/assets/gui-mockup.svg" alt="BTFix Graphical User Interface Mockup" width="100%">
+</p>
 
 * Launch via Desktop Shortcut or run `BTFix-GUI.bat`.
 * Or launch from PowerShell: `.\BTFix-GUI.ps1`.
+* Interactive text menu launcher: `BTFix.bat`.
 
 ---
 
@@ -75,17 +52,13 @@ Most guides tell you to *"download a driver"*. **That is almost always wrong.**
 
 Windows has a strict single-active-host Bluetooth architecture. When you plug an external USB dongle (CSR, Realtek, Actions, Intel) into a PC or laptop with a built-in motherboard Wi-Fi/Bluetooth combo card:
 
-```
-[ Motherboard Wi-Fi/BT Card ] ──(Grabs Windows bthserv first)──> 🟢 ACTIVE (Code 0)
-                                                                       │
-                                                       (Blocks 2nd Host Radio)
-                                                                       ▼
-[ External High-Gain USB Dongle ] ─────────────────────────────> 🔴 CODE 31 (FAILED_ADD)
-```
-
 1. The internal adapter grabs the Bluetooth stack (`bthserv`) during boot.
 2. Windows encounters the second host radio (your dongle) and blocks it with **Code 31 (`CM_PROB_FAILED_ADD`)**.
 3. Your wireless earbuds stay connected to the weak motherboard card, leading to audio cutouts, stutters, and Wi-Fi 2.4GHz coexistence interference.
+
+<p align="center">
+  <img src="docs/assets/architecture.svg" alt="BTFix Architecture & Conflict Resolution Engine" width="100%">
+</p>
 
 **BTFix fixes this permanently and reversibly:** it safely parks the competing adapter into standby (Code 22), binds the superior dongle to the stack (Code 0), and restarts the Windows Audio Stack so your earbuds lock onto full-strength RF.
 
