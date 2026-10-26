@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     BTFix — diagnose and repair USB Bluetooth dongles that Windows refuses to
     start (Code 31 / CM_PROB_FAILED_ADD) and the Bluetooth stack problems

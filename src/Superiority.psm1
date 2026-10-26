@@ -42,7 +42,7 @@ function Get-BTFixLmpVersionName {
 .SYNOPSIS
 Queries detailed Bluetooth radio hardware specifications from PnP properties.
 #>
-function Get-BTFixRadioSpecs {
+function Get-BTFixRadioSpec {
     [CmdletBinding()]
     [OutputType([object])]
     param([Parameter(Mandatory)][string]$InstanceId)
@@ -158,7 +158,7 @@ function Get-BTFixRadioScore {
             $isMobile = $true
         }
         if (-not $isMobile -and $lmp -and $lmp -ge 11) {
-            $score += 28
+            $score += 20
             $factors += "Internal PCIe Card (Desktop chassis with dedicated RF clearance)"
         } else {
             $score += 15
@@ -203,7 +203,7 @@ function Get-BTFixSuperiorRadio {
 
     if ($Radios.Count -eq 0) { return $null }
     if ($Radios.Count -eq 1) {
-        $specs = Get-BTFixRadioSpecs -InstanceId $Radios[0].InstanceId
+        $specs = Get-BTFixRadioSpec -InstanceId $Radios[0].InstanceId
         $eval = Get-BTFixRadioScore -Radio $Radios[0] -Specs $specs
         return [pscustomobject]@{
             SuperiorRadio = $Radios[0]
@@ -214,12 +214,12 @@ function Get-BTFixSuperiorRadio {
 
     $scored = @()
     foreach ($r in $Radios) {
-        $specs = Get-BTFixRadioSpecs -InstanceId $r.InstanceId
+        $specs = Get-BTFixRadioSpec -InstanceId $r.InstanceId
         $eval = Get-BTFixRadioScore -Radio $r -Specs $specs
         $scored += $eval
     }
 
-    $sorted = $scored | Sort-Object -Property Score -Descending
+    $sorted = @($scored | Sort-Object -Property @{ Expression = 'Score'; Descending = $true }, @{ Expression = { -not $_.Radio.IsInternal }; Descending = $true })
     $winner = $sorted[0]
     $runnerUp = $sorted[1]
 
@@ -238,6 +238,8 @@ function Get-BTFixSuperiorRadio {
     }
 }
 
+Set-Alias -Name Get-BTFixRadioSpecs -Value Get-BTFixRadioSpec
+
 Export-ModuleMember -Function @(
-    'Get-BTFixLmpVersionName', 'Get-BTFixRadioSpecs', 'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio'
-)
+    'Get-BTFixLmpVersionName', 'Get-BTFixRadioSpec', 'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio'
+) -Alias @('Get-BTFixRadioSpecs')

@@ -1,4 +1,4 @@
-# General health checks that are not about a single radio:
+﻿# General health checks that are not about a single radio:
 #  - the services the Bluetooth stack depends on
 #  - the software radio state (Windows can have the radio switched off)
 #  - paired peripherals that are "not connected" (CM_PROB_PHANTOM / code 45)

@@ -1,4 +1,4 @@
-# BTFix — Bluetooth radio diagnostics and repair engine.
+﻿# BTFix — Bluetooth radio diagnostics and repair engine.
 #
 # Everything here is side-effect free unless a function explicitly says
 # otherwise; the mutating helpers all support -WhatIf via
@@ -437,7 +437,7 @@ function Invoke-BTFixRepair {
                     Write-BTFixLog -Message "Superiority Engine: selected '$($wanted.FriendlyName)' ($($sup.Reason))" -Level 'INFO' -Path $LogPath
                 }
             } catch {
-                # fallback
+                Write-BTFixLog -Message "Superiority engine evaluation fallback: $($_.Exception.Message)" -Level 'INFO' -Path $LogPath
             }
             if (-not $wanted) {
                 $wanted = $diagnosis.Radios | Where-Object { -not $_.IsInternal } | Select-Object -First 1

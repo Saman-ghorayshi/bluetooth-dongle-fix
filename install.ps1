@@ -17,7 +17,7 @@
 [CmdletBinding()]
 param(
     [string]$InstallDir = (Join-Path $env:LOCALAPPDATA 'BTFix'),
-    [switch]$LaunchGui = $true,
+    [switch]$NoGui,
     [switch]$NoShortcut,
     [switch]$Uninstall,
     [string]$Branch = 'main'
@@ -185,7 +185,7 @@ Write-Host @"
 ===================================================================
 "@ -ForegroundColor Cyan
 
-if ($LaunchGui) {
+if (-not $NoGui) {
     $guiBat = Join-Path $InstallDir 'BTFix-GUI.bat'
     if (Test-Path -LiteralPath $guiBat) {
         Write-Host "Launching Graphical Interface..." -ForegroundColor Green

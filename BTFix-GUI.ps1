@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Bluetooth Dongle Fix — Modern Graphical User Interface (WPF / XAML)
 .DESCRIPTION
@@ -261,7 +261,7 @@ $btnClearLog          = $window.FindName('BtnClearLog')
 # Brush converter
 $brushConv = [System.Windows.Media.BrushConverter]::new()
 
-function Update-DispatcherUI {
+function Invoke-DispatcherUI {
     [System.Windows.Threading.Dispatcher]::CurrentDispatcher.Invoke([Action]{}, [System.Windows.Threading.DispatcherPriority]::Background)
 }
 
@@ -297,10 +297,10 @@ function Write-GuiLog {
 
     $txtConsole.Document.Blocks.Add($p)
     $txtConsole.ScrollToEnd()
-    Update-DispatcherUI
+    Invoke-DispatcherUI
 }
 
-function Set-ElevationBadge {
+function Show-ElevationBadge {
     $isAdmin = Test-BTFixAdministrator
     if ($isAdmin) {
         $badgeAdmin.Background = $brushConv.ConvertFromString('#12261E')
@@ -317,7 +317,7 @@ function Set-ElevationBadge {
     }
 }
 
-function Refresh-HardwareState {
+function Update-HardwareState {
     Write-GuiLog 'INFO' 'Scanning hardware tree for Bluetooth host adapters...'
     $panelRadios.Children.Clear()
     $panelPeripherals.Children.Clear()
@@ -585,7 +585,7 @@ $btnElevate.Add_Click({
 })
 
 $btnScan.Add_Click({
-    Refresh-HardwareState
+    Update-HardwareState
 })
 
 $btnClearLog.Add_Click({
@@ -614,7 +614,7 @@ $btnAutoFix.Add_Click({
         Write-GuiLog 'OK' "Repair pipeline finished: $($res.Count) change(s) recorded."
         
         # Immediate state reload
-        Refresh-HardwareState
+        Update-HardwareState
     } catch {
         Write-GuiLog 'ERROR' "Repair encountered an error: $($_.Exception.Message)"
     } finally {
@@ -634,7 +634,7 @@ $btnRestartAudio.Add_Click({
         Write-GuiLog 'ACTION' 'Restarting BTAGService and Windows AudioEndpointBuilder...'
         Restart-BTFixAudioStack
         Write-GuiLog 'OK' 'Audio services successfully cycled. Output endpoints re-registered.'
-        Refresh-HardwareState
+        Update-HardwareState
     } catch {
         Write-GuiLog 'ERROR' "Failed cycling audio services: $($_.Exception.Message)"
     }
@@ -653,7 +653,7 @@ $btnRollback.Add_Click({
         } else {
             Write-GuiLog 'WARN' 'No previous snapshot found or no changes needed restoring.'
         }
-        Refresh-HardwareState
+        Update-HardwareState
     } catch {
         Write-GuiLog 'ERROR' "Rollback failed: $($_.Exception.Message)"
     }
@@ -672,7 +672,7 @@ $btnExport.Add_Click({
 })
 
 # Initialize UI
-Set-ElevationBadge
-Refresh-HardwareState
+Show-ElevationBadge
+Update-HardwareState
 
 $window.ShowDialog() | Out-Null
