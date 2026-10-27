@@ -317,7 +317,7 @@ function Show-ElevationBadge {
     }
 }
 
-function Update-HardwareState {
+function Show-HardwareState {
     Write-GuiLog 'INFO' 'Scanning hardware tree for Bluetooth host adapters...'
     $panelRadios.Children.Clear()
     $panelPeripherals.Children.Clear()
@@ -527,6 +527,7 @@ function Update-HardwareState {
     # Diagnosis Analysis
     $diag = Get-BTFixDiagnosis -Inventory $radios -NoLive
     $findings = @(Get-BTFixFinding -Inventory $radios -NoLive)
+    if ($findings.Count -gt 0) { Write-GuiLog 'WARN' "Discovered $($findings.Count) diagnostic finding(s)." }
 
     if ($diag.Classification -eq 'RadioConflictOrDriverStartFailure') {
         $borderDiagnosis.Background = $brushConv.ConvertFromString('#361214')
@@ -585,7 +586,7 @@ $btnElevate.Add_Click({
 })
 
 $btnScan.Add_Click({
-    Update-HardwareState
+    Show-HardwareState
 })
 
 $btnClearLog.Add_Click({
@@ -614,7 +615,7 @@ $btnAutoFix.Add_Click({
         Write-GuiLog 'OK' "Repair pipeline finished: $($res.Count) change(s) recorded."
         
         # Immediate state reload
-        Update-HardwareState
+        Show-HardwareState
     } catch {
         Write-GuiLog 'ERROR' "Repair encountered an error: $($_.Exception.Message)"
     } finally {
@@ -634,7 +635,7 @@ $btnRestartAudio.Add_Click({
         Write-GuiLog 'ACTION' 'Restarting BTAGService and Windows AudioEndpointBuilder...'
         Restart-BTFixAudioStack
         Write-GuiLog 'OK' 'Audio services successfully cycled. Output endpoints re-registered.'
-        Update-HardwareState
+        Show-HardwareState
     } catch {
         Write-GuiLog 'ERROR' "Failed cycling audio services: $($_.Exception.Message)"
     }
@@ -653,7 +654,7 @@ $btnRollback.Add_Click({
         } else {
             Write-GuiLog 'WARN' 'No previous snapshot found or no changes needed restoring.'
         }
-        Update-HardwareState
+        Show-HardwareState
     } catch {
         Write-GuiLog 'ERROR' "Rollback failed: $($_.Exception.Message)"
     }
@@ -673,6 +674,7 @@ $btnExport.Add_Click({
 
 # Initialize UI
 Show-ElevationBadge
-Update-HardwareState
+Show-HardwareState
+if ($AutoScan) { Write-GuiLog 'INFO' 'Launched with -AutoScan switch.' }
 
 $window.ShowDialog() | Out-Null
