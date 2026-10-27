@@ -640,10 +640,12 @@ Describe 'repair pipeline (mocked)' {
         }
 
         # The real safety guard reads the device class through Get-PnpDevice;
-        # the mock answers Bluetooth for radio-shaped ids and Net otherwise.
+        # the mock answers Bluetooth for radio-shaped ids, Net otherwise, and
+        # an empty inventory for live enumerations (-Class calls).
         function Get-PnpDevice {
             [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidOverwritingBuiltInCmdlets', '', Justification = 'Test mock: the safety guard must be exercised under its real name')]
-            param($InstanceId)
+            param($InstanceId, $Class)
+            if ($Class) { return $null }
             $class = if ($InstanceId -like 'USB\*') { 'Bluetooth' } else { 'Net' }
             [pscustomobject]@{ Class = $class; InstanceId = $InstanceId }
         }
@@ -749,6 +751,35 @@ Describe 'repair pipeline (mocked)' {
         $null = & $btfixModule { Invoke-BTFixPnp -Arguments @('/enable-device', 'USB\DONGLE') }
         $flagged = & $btfixModule { $script:BTFixRebootRequired }
         Assert-True $flagged 'exit 3010 must set the reboot-required flag'
+    }
+    It 'refuses a second repair while one holds the lock' {
+        Reset-PipelineMock
+        # Mutexes are re-entrant on the owning THREAD, so the holder must be
+        # a different thread - a runspace - not this one.
+        $holder = [powershell]::Create()
+        $null = $holder.AddScript({
+            $m = [System.Threading.Mutex]::new($false, 'Local\BTFix-Repair')
+            $null = $m.WaitOne(3000)
+            Start-Sleep -Milliseconds 600
+            $null = $m.ReleaseMutex()
+            $m.Dispose()
+        })
+        $handle = $holder.BeginInvoke()
+        Start-Sleep -Milliseconds 200  # let the holder take the lock first
+        try {
+            $repair = Invoke-BTFixRepair -BackupPath (Join-Path ([IO.Path]::GetTempPath()) 'btfix-lock-test')
+            Assert-True $repair.LockFailed
+            Assert-Equal 0 @($repair.Steps).Count
+            $rollback = Invoke-BTFixRollback -BackupPath (Join-Path ([IO.Path]::GetTempPath()) 'btfix-lock-test')
+            Assert-True $rollback.LockFailed
+        } finally {
+            $null = $handle.AsyncWaitHandle.WaitOne(5000)
+            $holder.Dispose()
+        }
+        # the lock is free again: the wrapper proceeds (with the mocked
+        # pipeline still installed, nothing mutates)
+        $again = Invoke-BTFixRollback -BackupPath (Join-Path ([IO.Path]::GetTempPath()) 'btfix-lock-test')
+        Assert-False $again.LockFailed
     }
 }
 

@@ -193,6 +193,10 @@ switch ($effectiveMode) {
 
     'Fix' {
         $result = Invoke-BTFixRepair -Radio $Radio -PreferInternal:$PreferInternal -SearchWindowsUpdate:$SearchWindowsUpdate -DisableUsbSuspend:$DisableUsbSuspend -ForgetStale:$ForgetStale -BackupPath $BackupPath -LogPath $LogPath
+        if ($result.LockFailed) {
+            Write-Host 'Another BTFix repair is already running. Wait for it to finish and try again.' -ForegroundColor Red
+            exit 2
+        }
         Write-Host ''
         foreach ($s in $result.Steps) { Write-Host "  step: $s" -ForegroundColor DarkGray }
         if ($result.Healthy) {
@@ -210,6 +214,10 @@ switch ($effectiveMode) {
 
     'Rollback' {
         $result = Invoke-BTFixRollback -BackupPath $BackupPath -LogPath $LogPath
+        if ($result.LockFailed) {
+            Write-Host 'Another BTFix repair is already running. Wait for it to finish and try again.' -ForegroundColor Red
+            exit 2
+        }
         if ($result.Changed) {
             Write-Host ("Restored: " + ($result.Restored -join ', ')) -ForegroundColor Green
         } else {

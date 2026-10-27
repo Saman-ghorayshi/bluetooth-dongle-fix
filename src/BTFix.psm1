@@ -660,7 +660,7 @@ Runs the repair pipeline.
    rescan (the stack can only be held by a single radio)
 5. verify, and report
 #>
-function Invoke-BTFixRepair {
+function Invoke-BTFixRepairCore {
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([object])]
     param(
@@ -864,7 +864,7 @@ function Invoke-BTFixRepair {
 .SYNOPSIS
 Restores radios that were disabled by a previous repair.
 #>
-function Invoke-BTFixRollback {
+function Invoke-BTFixRollbackCore {
     [CmdletBinding(SupportsShouldProcess)]
     [OutputType([object])]
     param([string]$BackupPath, [string]$LogPath)
@@ -930,6 +930,81 @@ function Invoke-BTFixRollback {
     Restart-BTFixStack -LogPath $LogPath
     Write-BTFixLog -Message ("restored: " + ($(if ($restored.Count) { $restored -join ', ' } else { 'nothing to restore' }))) -Level 'OK' -Path $LogPath
     return [pscustomobject]@{ Changed = ($restored.Count -gt 0); Restored = $restored }
+}
+
+<#
+.SYNOPSIS
+Guards against two repairs running at once.
+.DESCRIPTION
+A session-scoped named mutex held for the duration of a repair or rollback.
+Returns the mutex when it was acquired, $null when another BTFix is already
+mid-repair - the caller must refuse instead of queueing, because a queued
+repair would act on state the first one already changed.
+#>
+function Enter-BTFixRepairLock {
+    [CmdletBinding()]
+    [OutputType([object])]
+    param()
+    $mutex = New-Object System.Threading.Mutex($false, 'Local\BTFix-Repair')
+    try {
+        $acquired = $mutex.WaitOne([TimeSpan]::Zero)
+    } catch [System.Threading.AbandonedMutexException] {
+        # the previous holder crashed while holding the lock - it is ours now
+        $acquired = $true
+    }
+    if ($acquired) { return $mutex }
+    $mutex.Dispose()
+    return $null
+}
+
+function Invoke-BTFixRepair {
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([object])]
+    param(
+        [string]$Radio,
+        [switch]$PreferInternal,
+        [switch]$SearchWindowsUpdate,
+        [switch]$DisableUsbSuspend,
+        [switch]$ForgetStale,
+        [string]$BackupPath,
+        [string]$LogPath
+    )
+    $lock = Enter-BTFixRepairLock
+    if (-not $lock) {
+        Write-BTFixLog -Message 'another BTFix repair/rollback is already running - refusing to start a second one' -Level 'ERROR' -Path $LogPath
+        return [pscustomobject]@{
+            Changed        = $false
+            Healthy        = $false
+            RebootRequired = $false
+            LockFailed     = $true
+            Diagnosis      = $null
+            Steps          = @()
+            Backup         = $null
+        }
+    }
+    try {
+        return Invoke-BTFixRepairCore @PSBoundParameters
+    } finally {
+        $null = $lock.ReleaseMutex()
+        $lock.Dispose()
+    }
+}
+
+function Invoke-BTFixRollback {
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([object])]
+    param([string]$BackupPath, [string]$LogPath)
+    $lock = Enter-BTFixRepairLock
+    if (-not $lock) {
+        Write-BTFixLog -Message 'another BTFix repair/rollback is already running - refusing to start a second one' -Level 'ERROR' -Path $LogPath
+        return [pscustomobject]@{ Changed = $false; Restored = @(); LockFailed = $true }
+    }
+    try {
+        return Invoke-BTFixRollbackCore @PSBoundParameters
+    } finally {
+        $null = $lock.ReleaseMutex()
+        $lock.Dispose()
+    }
 }
 
 <#
