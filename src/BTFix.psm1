@@ -368,6 +368,63 @@ function Invoke-BTFixRescan {
 
 <#
 .SYNOPSIS
+Decides which radio a repair should converge on.
+.DESCRIPTION
+Order of precedence:
+1. The radio the user pointed at (-Radio).
+2. A radio blocked with code 31 while another radio is healthy. That is the
+   dual-radio conflict signature, not a broken adapter - the blocked radio
+   is the one the user wants working (usually the dongle they just plugged
+   in). A blocked radio cannot be benchmarked: its LMP data only exists
+   once the radio has started, so the Superiority Engine must not decide here.
+3. -PreferInternal: the internal adapter.
+4. The Superiority Engine among radios that can actually be benchmarked.
+5. External dongle first, internal adapter as the last fallback.
+#>
+function Resolve-BTFixWantedRadio {
+    [CmdletBinding()]
+    [OutputType([object])]
+    param(
+        [AllowEmptyCollection()]
+        [object[]]$Radios,
+        [string]$Radio,
+        [switch]$PreferInternal
+    )
+
+    if (-not $Radios -or $Radios.Count -eq 0) { return $null }
+
+    if ($Radio) {
+        $named = @($Radios | Where-Object { $_.InstanceId -eq $Radio })
+        if ($named.Count -gt 0) { return $named[0] }
+    }
+
+    $healthy = @($Radios | Where-Object { $_.IsHealthy })
+    $conflictBlocked = @($Radios | Where-Object { -not $_.IsHealthy -and -not $_.IsDisabled -and $_.ProblemCode -eq 31 })
+    if (-not $PreferInternal -and $healthy.Count -gt 0 -and $conflictBlocked.Count -gt 0) {
+        return ($conflictBlocked | Select-Object -First 1)
+    }
+
+    if ($PreferInternal) {
+        $internal = @($Radios | Where-Object { $_.IsInternal })
+        if ($internal.Count -gt 0) { return ($internal | Select-Object -First 1) }
+    }
+
+    if ($Radios.Count -gt 1) {
+        try {
+            $sup = Get-BTFixSuperiorRadio -Radios $Radios
+            if ($sup -and $sup.SuperiorRadio) { return $sup.SuperiorRadio }
+        } catch {
+            Write-Verbose "superiority evaluation fell through: $($_.Exception.Message)"
+        }
+    }
+
+    $external = @($Radios | Where-Object { -not $_.IsInternal })
+    if ($external.Count -gt 0) { return ($external | Select-Object -First 1) }
+    return (@($Radios | Where-Object { $_.IsInternal }) | Select-Object -First 1)
+}
+
+<#
+.SYNOPSIS
 Runs the repair pipeline.
 .DESCRIPTION
 1. snapshot state
@@ -417,31 +474,12 @@ function Invoke-BTFixRepair {
         }
     }
 
-    # Determine the wanted radio: the one the user pointed at, otherwise
-    # the superior radio detected by the Superiority Engine, otherwise the internal adapter.
-    $wanted = $null
-    if ($Radio) {
-        $wanted = $diagnosis.Radios | Where-Object { $_.InstanceId -eq $Radio } | Select-Object -First 1
-    }
-    if (-not $wanted) {
-        if ($PreferInternal) {
-            $wanted = $diagnosis.Radios | Where-Object { $_.IsInternal } | Select-Object -First 1
-            if (-not $wanted) { $wanted = $diagnosis.Radios | Where-Object { -not $_.IsInternal } | Select-Object -First 1 }
-        } else {
-            try {
-                $sup = Get-BTFixSuperiorRadio -Radios $diagnosis.Radios
-                if ($sup -and $sup.SuperiorRadio) {
-                    $wanted = $sup.SuperiorRadio
-                    Write-BTFixLog -Message "Superiority Engine: selected '$($wanted.FriendlyName)' ($($sup.Reason))" -Level 'INFO' -Path $LogPath
-                }
-            } catch {
-                Write-BTFixLog -Message "Superiority engine evaluation fallback: $($_.Exception.Message)" -Level 'INFO' -Path $LogPath
-            }
-            if (-not $wanted) {
-                $wanted = $diagnosis.Radios | Where-Object { -not $_.IsInternal } | Select-Object -First 1
-                if (-not $wanted) { $wanted = $diagnosis.Radios | Where-Object { $_.IsInternal } | Select-Object -First 1 }
-            }
-        }
+    # Determine the wanted radio: the one the user pointed at, otherwise the
+    # conflict-blocked radio (the dongle they just plugged in), otherwise the
+    # Superiority Engine's pick among radios that can be benchmarked.
+    $wanted = Resolve-BTFixWantedRadio -Radios $diagnosis.Radios -Radio $Radio -PreferInternal:$PreferInternal
+    if ($wanted) {
+        Write-BTFixLog -Message "target radio: $($wanted.FriendlyName) ($($wanted.InstanceId))" -Level 'STEP' -Path $LogPath
     }
 
     # step 2: break any dual-radio conflict before enabling/restarting
@@ -481,19 +519,9 @@ function Invoke-BTFixRepair {
 
     $after = Get-BTFixDiagnosis
     if ($after.Broken.Count -gt 0 -and $after.Healthy.Count -gt 0) {
-        # Only one radio can own the Bluetooth stack. The radio the user wants
-        # working wins: the one they pointed at, otherwise the external dongle
-        # (the thing they just plugged in), otherwise the internal adapter.
-        $wanted = $null
-        if ($Radio) {
-            $wanted = $after.Radios | Where-Object { $_.InstanceId -eq $Radio } | Select-Object -First 1
-        }
-        if (-not $wanted) {
-            $wanted = $after.Radios | Where-Object { -not $_.IsInternal } | Select-Object -First 1
-        }
-        if (-not $wanted) {
-            $wanted = $after.Radios | Where-Object { $_.IsInternal } | Select-Object -First 1
-        }
+        # Only one radio can own the Bluetooth stack. The same precedence as
+        # the first pass decides which radio the user wants working.
+        $wanted = Resolve-BTFixWantedRadio -Radios $after.Radios -Radio $Radio -PreferInternal:$PreferInternal
 
         $brokenIsWanted = $wanted -and ($after.Broken | Where-Object { $_.InstanceId -eq $wanted.InstanceId })
         if ($brokenIsWanted) {
@@ -732,5 +760,6 @@ Export-ModuleMember -Function @(
     'Get-BTFixRadio', 'Get-BTFixDiagnosis', 'New-BTFixBackup', 'Get-BTFixLatestBackup', 'Restart-BTFixAudioStack',
     'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Invoke-BTFixWindowsUpdate',
     'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot', 'Test-BTFixInternalRadio',
-    'Get-BTFixLmpVersionName', 'Get-BTFixRadioSpecs', 'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio'
+    'Get-BTFixLmpVersionName', 'Get-BTFixRadioSpecs', 'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio',
+    'Resolve-BTFixWantedRadio'
 )

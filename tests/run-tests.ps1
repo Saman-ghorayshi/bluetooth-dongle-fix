@@ -41,6 +41,34 @@ function Get-TestRadio {
     }
 }
 
+# A radio exactly as Get-BTFixRadio returns it on a live machine: NO
+# LmpVersion property at all, because that data only exists once a radio
+# has successfully started. Mocks that attach it hide real selection bugs.
+function Get-LiveShapeRadio {
+    param(
+        [string]$Id,
+        [string]$Name = 'Radio',
+        [int]$Code = 0,
+        [string]$Status = 'OK',
+        [bool]$Internal = $false
+    )
+    return [pscustomobject]@{
+        InstanceId     = $Id
+        FriendlyName   = $Name
+        Status         = $Status
+        ProblemCode    = $Code
+        ProblemStatus  = $null
+        DriverVersion  = '1.0.0.0'
+        DriverProvider = $null
+        HardwareIds    = @('USB\VID_0A12&PID_0001')
+        LocationInfo   = 'Port_#0001.Hub_#0001'
+        Parent         = 'USB\ROOT_HUB30\4&84aac64&0&0'
+        IsInternal     = $Internal
+        IsHealthy      = ($Status -eq 'OK' -and $Code -eq 0)
+        IsDisabled     = ($Code -eq 22)
+    }
+}
+
 Describe 'diagnosis' {
     It 'reports Healthy when a single radio works' {
         $d = Get-BTFixDiagnosis -Inventory @((Get-TestRadio -Id 'USB\A'))
@@ -158,7 +186,7 @@ Describe 'report' {
 Describe 'tooling' {
     It 'exposes the public functions' {
         $exported = (Get-Module BTFix).ExportedFunctions.Keys
-        foreach ($fn in @('Get-BTFixRadio', 'Get-BTFixDiagnosis', 'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Write-BTFixReport')) {
+        foreach ($fn in @('Get-BTFixRadio', 'Get-BTFixDiagnosis', 'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Write-BTFixReport', 'Resolve-BTFixWantedRadio')) {
             Assert-True ($exported -contains $fn) "expected $fn to be exported"
         }
     }
@@ -324,6 +352,54 @@ Describe 'findings' {
     }
 }
 
+Describe 'repair wanted-radio selection' {
+    It 'picks the code-31 dongle over the healthy internal radio (real radio shape)' {
+        $dongle = Get-LiveShapeRadio -Id 'USB\DONGLE' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error' -Internal $false
+        $internal = Get-LiveShapeRadio -Id 'USB\INTERNAL' -Name 'Realtek Bluetooth Adapter' -Internal $true
+        $w = Resolve-BTFixWantedRadio -Radios @($internal, $dongle)
+        Assert-Equal 'USB\DONGLE' $w.InstanceId
+    }
+
+    It 'picks the code-31 dongle regardless of enumeration order' {
+        $dongle = Get-LiveShapeRadio -Id 'USB\DONGLE' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error' -Internal $false
+        $internal = Get-LiveShapeRadio -Id 'USB\INTERNAL' -Name 'Realtek Bluetooth Adapter' -Internal $true
+        $w = Resolve-BTFixWantedRadio -Radios @($dongle, $internal)
+        Assert-Equal 'USB\DONGLE' $w.InstanceId
+    }
+
+    It 'honors -PreferInternal even when a dongle is conflict-blocked' {
+        $dongle = Get-LiveShapeRadio -Id 'USB\DONGLE' -Name 'Generic Bluetooth Radio' -Code 31 -Status 'Error' -Internal $false
+        $internal = Get-LiveShapeRadio -Id 'USB\INTERNAL' -Name 'Realtek Bluetooth Adapter' -Internal $true
+        $w = Resolve-BTFixWantedRadio -Radios @($dongle, $internal) -PreferInternal
+        Assert-Equal 'USB\INTERNAL' $w.InstanceId
+    }
+
+    It 'honors an explicit -Radio over every other rule' {
+        $dongle = Get-LiveShapeRadio -Id 'USB\DONGLE' -Code 31 -Status 'Error' -Internal $false
+        $internal = Get-LiveShapeRadio -Id 'USB\INTERNAL' -Internal $true
+        $w = Resolve-BTFixWantedRadio -Radios @($dongle, $internal) -Radio 'USB\INTERNAL'
+        Assert-Equal 'USB\INTERNAL' $w.InstanceId
+    }
+
+    It 'keeps a healthy internal over a dongle with a real driver fault (code 48)' {
+        $dongle = Get-LiveShapeRadio -Id 'USB\BLOCKED' -Name 'Broken Dongle' -Code 48 -Status 'Error' -Internal $false
+        $internal = Get-LiveShapeRadio -Id 'USB\INTERNAL' -Name 'Working Internal' -Internal $true
+        $w = Resolve-BTFixWantedRadio -Radios @($dongle, $internal)
+        Assert-Equal 'USB\INTERNAL' $w.InstanceId
+    }
+
+    It 'uses real capability data when both radios are benchmarkable' {
+        $dongle = Get-TestRadio -Id 'USB\OLD' -Name 'Legacy Dongle' -Internal $false -Lmp 4
+        $internal = Get-TestRadio -Id 'USB\NEW' -Name 'Modern Internal' -Internal $true -Lmp 12
+        $w = Resolve-BTFixWantedRadio -Radios @($dongle, $internal)
+        Assert-Equal 'USB\NEW' $w.InstanceId
+    }
+
+    It 'returns nothing for an empty inventory' {
+        Assert-True ($null -eq (Resolve-BTFixWantedRadio -Radios @()))
+    }
+}
+
 Describe 'superiority evaluation' {
     It 'maps LMP version numbers to standard Bluetooth specs' {
         Assert-Equal 'Bluetooth 4.0' (Get-BTFixLmpVersionName -LmpVersion 6)
@@ -363,6 +439,14 @@ Describe 'superiority evaluation' {
         $res = Get-BTFixSuperiorRadio -Radios @($single)
         Assert-Equal 'USB\SOLO' $res.SuperiorRadio.InstanceId
         Assert-Match 'Only one' $res.Reason
+    }
+
+    It 'scores Bluetooth 4.0 < 4.1 < 4.2 monotonically' {
+        $r40 = Get-BTFixRadioScore -Radio (Get-TestRadio -Id 'USB\A' -Lmp 6)
+        $r41 = Get-BTFixRadioScore -Radio (Get-TestRadio -Id 'USB\B' -Lmp 7)
+        $r42 = Get-BTFixRadioScore -Radio (Get-TestRadio -Id 'USB\C' -Lmp 8)
+        Assert-True ($r40.Score -lt $r41.Score) "BT 4.0 ($($r40.Score)) should score below BT 4.1 ($($r41.Score))"
+        Assert-True ($r41.Score -lt $r42.Score) "BT 4.1 ($($r41.Score)) should score below BT 4.2 ($($r42.Score))"
     }
 
     It 'heavily penalizes dongles with blocked drivers (code 48) so working internal radio wins' {

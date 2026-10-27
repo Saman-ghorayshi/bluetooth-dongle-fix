@@ -131,6 +131,9 @@ function Get-BTFixRadioScore {
         } elseif ($lmp -eq 8) {
             $score += 35
             $factors += "Bluetooth 4.2 (Secure Connections & Data Packet Length Extension)"
+        } elseif ($lmp -eq 7) {
+            $score += 28
+            $factors += "Bluetooth 4.1 (Data Length Extension & L2CAP Connection-Oriented Channels)"
         } elseif ($lmp -eq 6) {
             $score += 25
             $factors += "Bluetooth 4.0 (Legacy Smart Ready)"
@@ -140,7 +143,14 @@ function Get-BTFixRadioScore {
         }
     } else {
         $score += 30
-        $factors += "Bluetooth Version Unspecified (Default Baseline)"
+        if ($Radio.ProblemCode -eq 31) {
+            # A conflict-blocked radio never started, so Windows has no LMP
+            # data for it. Score it at baseline instead of pretending the
+            # radio is genuinely spec-less.
+            $factors += "LMP unreadable - the radio is blocked from starting (Code 31), scored at baseline"
+        } else {
+            $factors += "Bluetooth Version Unspecified (Default Baseline)"
+        }
     }
 
     # Criterion 2: Antenna Environment & Form Factor (up to 30 points)

@@ -144,9 +144,15 @@ switch ($effectiveMode) {
             Write-Host ("  {0,-34} {1,-22} {2,-9} {3}" -f $r.FriendlyName, $r.InstanceId, $kind, $state)
         }
         if ($radios.Count -gt 1) {
-            $comp = Get-BTFixSuperiorRadio -Radios $radios
-            Write-Host ''
-            Write-Host ("  Superior radio detected: {0} ({1}/100 pts) - run with -Mode Compare for benchmark" -f $comp.SuperiorRadio.FriendlyName, $comp.WinnerScore.Score) -ForegroundColor DarkCyan
+            $benchmarkable = @($radios | Where-Object { $_.IsHealthy -or $_.IsDisabled })
+            if ($benchmarkable.Count -eq $radios.Count) {
+                # A blocked radio never started, so its capability data cannot
+                # be read and a benchmark would compare real data against
+                # placeholders. Only rank radios that can be benchmarked.
+                $comp = Get-BTFixSuperiorRadio -Radios $radios
+                Write-Host ''
+                Write-Host ("  Superior radio detected: {0} ({1}/100 pts) - run with -Mode Compare for benchmark" -f $comp.SuperiorRadio.FriendlyName, $comp.WinnerScore.Score) -ForegroundColor DarkCyan
+            }
         }
         Write-Host ''
         Write-Host ("Findings ({0})" -f $findings.Count) -ForegroundColor Cyan
