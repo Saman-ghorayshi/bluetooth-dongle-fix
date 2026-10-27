@@ -332,7 +332,11 @@ function Invoke-BTFixPnp {
         }
     }
     $out = & pnputil @Arguments 2>&1 | Out-String
-    Write-BTFixLog -Message ("pnputil " + ($Arguments -join ' ')) -Level 'STEP' -Path $LogPath
+    $code = $LASTEXITCODE
+    # 3010 = ERROR_SUCCESS_REBOOT_REQUIRED (see pnputil return values). Locale
+    # independent, unlike matching pnputil's printed text.
+    if ($code -eq 3010) { $script:BTFixRebootRequired = $true }
+    Write-BTFixLog -Message ("pnputil " + ($Arguments -join ' ') + " (exit $code)") -Level 'STEP' -Path $LogPath
     foreach ($line in ($out -split "`r?`n")) {
         if ($line.Trim()) { Write-BTFixLog -Message $line.Trim() -Path $LogPath }
     }
@@ -341,20 +345,23 @@ function Invoke-BTFixPnp {
 
 function Restart-BTFixStack {
     [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([bool])]
     param([string]$LogPath)
     if (-not (Test-BTFixAdministrator)) {
         Write-BTFixLog -Message 'not elevated — skipping service restart' -Level 'WARN' -Path $LogPath
-        return
+        return $false
     }
     if ($PSCmdlet.ShouldProcess('Bluetooth Support Service (bthserv)', 'Restart')) {
         try {
             Restart-Service -Name 'bthserv' -Force -ErrorAction Stop
             Write-BTFixLog -Message 'bthserv restarted' -Level 'OK' -Path $LogPath
+            Start-Sleep -Seconds 2
+            return $true
         } catch {
             Write-BTFixLog -Message ("bthserv restart failed: " + $_.Exception.Message) -Level 'WARN' -Path $LogPath
         }
-        Start-Sleep -Seconds 2
     }
+    return $false
 }
 
 function Restart-BTFixAudioStack {
@@ -381,11 +388,14 @@ function Restart-BTFixAudioStack {
 
 function Invoke-BTFixRescan {
     [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([bool])]
     param([string]$LogPath)
     if ($PSCmdlet.ShouldProcess('hardware', 'Scan for device changes')) {
         Invoke-BTFixPnp -Arguments @('/scan-devices') -LogPath $LogPath | Out-Null
         Start-Sleep -Seconds 5
+        return $true
     }
+    return $false
 }
 
 <#
@@ -470,6 +480,7 @@ function Invoke-BTFixRepair {
     )
 
     $steps = @()
+    $script:BTFixRebootRequired = $false
     $diagnosis = Get-BTFixDiagnosis
     Write-BTFixLog -Message "diagnosis: $($diagnosis.Classification) (confidence $($diagnosis.Confidence))" -Level 'STEP' -Path $LogPath
     foreach ($e in $diagnosis.Evidence) { Write-BTFixLog -Message $e -Path $LogPath }
@@ -526,8 +537,7 @@ function Invoke-BTFixRepair {
     }
 
     # step 4: restart the stack so it releases and re-attaches
-    Restart-BTFixStack -LogPath $LogPath
-    $steps += 'restarted bthserv'
+    if (Restart-BTFixStack -LogPath $LogPath) { $steps += 'restarted bthserv' }
 
     # step 5: re-enumerate the broken radio
     foreach ($bad in $diagnosis.Broken) {
@@ -536,8 +546,7 @@ function Invoke-BTFixRepair {
             $steps += "removed $($bad.InstanceId)"
         }
     }
-    Invoke-BTFixRescan -LogPath $LogPath
-    $steps += 'rescanned hardware'
+    if (Invoke-BTFixRescan -LogPath $LogPath) { $steps += 'rescanned hardware' }
 
     $after = Get-BTFixDiagnosis
     if ($after.Broken.Count -gt 0 -and $after.Healthy.Count -gt 0) {
@@ -556,8 +565,7 @@ function Invoke-BTFixRepair {
                     Invoke-BTFixPnp -Arguments @('/disable-device', $disable.InstanceId) -LogPath $LogPath | Out-Null
                     $steps += "disabled $($disable.InstanceId)"
                 }
-                Invoke-BTFixRescan -LogPath $LogPath
-                $steps += 'rescanned after conflict break'
+                if (Invoke-BTFixRescan -LogPath $LogPath) { $steps += 'rescanned after conflict break' }
             }
         }
         else {
@@ -621,7 +629,12 @@ function Invoke-BTFixRepair {
 
     $final = Get-BTFixDiagnosis
     $logContent = if ($LogPath -and (Test-Path -LiteralPath $LogPath)) { Get-Content -LiteralPath $LogPath -Raw } else { '' }
-    $rebootNeeded = ($logContent -match 'System reboot is needed|pending system reboot') -or (($final.Radios | ForEach-Object { $_.ProblemCode }) -contains 14)
+    # Locale-independent signals first: pnputil exit code 3010 (collected by
+    # Invoke-BTFixPnp) and problem code 14 (CM_PROB_NEED_RESTART). The English
+    # pnputil text stays as a last-resort signal for older builds.
+    $rebootNeeded = $script:BTFixRebootRequired -or
+        (($final.Radios | ForEach-Object { $_.ProblemCode }) -contains 14) -or
+        ($logContent -match 'System reboot is needed|pending system reboot')
     $ok = $final.Broken.Count -eq 0
 
     Write-BTFixLog -Message ("final state: " + $(if ($ok) { 'all radios healthy' } elseif ($rebootNeeded) { 'restart required to complete switch' } else { 'still broken' })) -Level $(if ($ok) { 'OK' } elseif ($rebootNeeded) { 'WARN' } else { 'ERROR' }) -Path $LogPath
