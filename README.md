@@ -1,7 +1,7 @@
 # 🎧 Bluetooth Dongle Fix (BTFix)
 
 <p align="center">
-  <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/actions"><img src="https://img.shields.io/badge/tests-40%2F40%20passing-brightgreen?style=flat-square&logo=github-actions" alt="Tests Status"></a>
+  <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/actions"><img src="https://img.shields.io/badge/tests-53%2F53%20passing-brightgreen?style=flat-square&logo=github-actions" alt="Tests Status"></a>
   <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License MIT"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?style=flat-square&logo=windows" alt="Platform Windows">
   <img src="https://img.shields.io/badge/powershell-5.1%20%7C%207%2B-5391FE?style=flat-square&logo=powershell" alt="PowerShell">
@@ -70,10 +70,10 @@ Not all Bluetooth radios are equal. When multiple adapters exist, BTFix's **Supe
 
 | Metric | Inspection Method | Impact on Score |
 | :--- | :--- | :--- |
-| **Bluetooth Spec / LMP** | `DEVPKEY_Bluetooth_RadioLmpVersion` & HCI version | **50 - 95 pts** (BT 4.0 = 50, BT 5.0 = 75, BT 5.1 = 80, BT 5.2 = 85, BT 5.3 = 90, BT 5.4 = 95) |
-| **RF Antenna Clearance** | `CM_DEVCAP_REMOVABLE` & Container ID | **+15 pts** for external USB dongles (isolated from motherboard Wi-Fi coexistence interference) |
-| **Chassis Factor** | SMBIOS Chassis Enclosure Type | **+5 pts** for desktop towers (internal cards shielded inside metal case) |
-| **Driver Reliability** | Device Problem Code & Filter Drivers | **-40 pts** penalty for severe driver failure (Code 48 / 28 / 43 / 10) |
+| **Bluetooth Spec / LMP** | `DEVPKEY_Bluetooth_RadioLmpVersion` & HCI version | **up to 55 pts** (BT 4.0 = 25, 4.1 = 28, 4.2 = 35, 5.0 = 45, 5.1 = 48, 5.2 = 50, 5.3 = 53, 5.4+ = 55; unreadable = 30 baseline) |
+| **RF Antenna Clearance** | `CM_DEVCAP_REMOVABLE` & Container ID | **+30 pts** for external USB dongles (isolated from motherboard Wi-Fi coexistence interference) |
+| **Chassis Factor** | SMBIOS `PCSystemType` & LMP | **+15 pts** integrated internal adapter, **+20 pts** desktop internal card with BT 5.1+ |
+| **Hardware Health** | Device Problem Code | **+15 pts** healthy, +10 parked/conflict (Code 22/31), **−40 pts** for severe driver failure (Code 48 / 28 / 43 / 10) |
 
 To benchmark your adapters in terminal:
 ```powershell
@@ -145,7 +145,7 @@ BTFix offers a full-featured CLI for power users, sysadmins, and automation scri
 ## 🛡️ Safety & Reliability Principles
 
 * **Class Guard**: Never touches Wi-Fi, Ethernet, USB hubs, or HID input devices. Only devices with `Class = 'Bluetooth'` are inspected or managed.
-* **100% Reversible**: Every `-Mode Fix` snapshots the exact PnP state before touching a single device. Running `-Mode Rollback` completely restores the prior configuration.
+* **100% Reversible**: Every `-Mode Fix` snapshots the exact PnP state *and* the USB power-management values before touching a single device. Running `-Mode Rollback` completely restores the prior configuration.
 * **Zero External Dependencies**: Uses native PowerShell 5.1/7+ cmdlets and stock Windows Presentation Framework (WPF). Nothing to install, no Python/Node/C++ runtimes required.
 * **Unplugged Recovery**: If an external USB dongle is unplugged after repair, BTFix auto-detects the single-radio state and recovers the motherboard adapter seamlessly.
 
@@ -161,16 +161,18 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
 
 ```
 == diagnosis                  [7 PASS]
-== backups                    [3 PASS]
-== report                     [1 PASS]
+== backups                    [4 PASS]
+== report                     [2 PASS]
 == tooling                    [3 PASS]
 == problem codes              [5 PASS]
 == chipset guidance           [3 PASS]
-== health checks              [3 PASS]
+== health checks              [4 PASS]
 == findings                   [9 PASS]
-== superiority evaluation     [6 PASS]
+== repair wanted-radio selection [7 PASS]
+== instance-id classification [2 PASS]
+== superiority evaluation     [7 PASS]
 ------------------------------------------------------------
-passed: 40   failed: 0
+passed: 53   failed: 0
 ```
 
 ---

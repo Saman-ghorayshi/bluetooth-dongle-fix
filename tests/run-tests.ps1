@@ -204,7 +204,7 @@ Describe 'report' {
         $dir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-test-' + [guid]::NewGuid().ToString('N'))
         try {
             $file = Join-Path $dir 'report.json'
-            $text = Write-BTFixReportJson -OutputPath $file
+            $null = Write-BTFixReportJson -OutputPath $file
             Assert-True (Test-Path -LiteralPath $file)
             $data = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
             Assert-Equal 'BTFix' $data.tool

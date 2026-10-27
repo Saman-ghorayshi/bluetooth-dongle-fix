@@ -596,9 +596,12 @@ function Show-HardwareState {
 
 $script:GuiCliProcess = $null
 
-function Set-GuiActionButtons {
+function Set-GuiActionButtonState {
+    [CmdletBinding(SupportsShouldProcess)]
     param([bool]$Enabled)
-    foreach ($b in @($btnAutoFix, $btnScan, $btnRestartAudio, $btnRollback)) { $b.IsEnabled = $Enabled }
+    if ($PSCmdlet.ShouldProcess('action buttons', "Set enabled=$Enabled")) {
+        foreach ($b in @($btnAutoFix, $btnScan, $btnRestartAudio, $btnRollback)) { $b.IsEnabled = $Enabled }
+    }
 }
 
 # Runs BTFix.ps1 in a hidden child process so the WPF window stays responsive
@@ -606,9 +609,13 @@ function Set-GuiActionButtons {
 # inherits this window's elevation; -NoElevation makes an unelevated child
 # fail fast with a clear message instead of spawning a second UAC prompt.
 function Start-GuiCliMode {
+    [CmdletBinding(SupportsShouldProcess)]
     param([ValidateSet('Fix', 'Rollback')][string]$Mode, [string[]]$ExtraArgs = @())
     if ($script:GuiCliProcess -and -not $script:GuiCliProcess.HasExited) {
         Write-GuiLog 'WARN' 'A repair is already running - wait for it to finish.'
+        return $false
+    }
+    if (-not $PSCmdlet.ShouldProcess("BTFix.ps1 -Mode $Mode", 'Run in a background process')) {
         return $false
     }
     $cli = Join-Path $scriptRoot 'BTFix.ps1'
@@ -626,27 +633,26 @@ function Start-GuiCliMode {
     $proc.StartInfo = $psi
 
     # DataReceived fires on a threadpool thread: copy the payload and marshal
-    # every UI touch onto the window's dispatcher.
+    # every UI touch onto the window's dispatcher. $args[0] is the sender,
+    # $args[1] the event args (declared params would read as unused to the
+    # analyzer and to a human).
     $onOut = [System.Diagnostics.DataReceivedEventHandler]{
-        param($s, $e)
-        if ($e.Data) {
-            $line = $e.Data
+        if ($args[1].Data) {
+            $line = $args[1].Data
             $window.Dispatcher.Invoke([action]{ Write-GuiLog 'INFO' $line }, [System.Windows.Threading.DispatcherPriority]::Normal)
         }
     }
     $onErr = [System.Diagnostics.DataReceivedEventHandler]{
-        param($s, $e)
-        if ($e.Data) {
-            $line = $e.Data
+        if ($args[1].Data) {
+            $line = $args[1].Data
             $window.Dispatcher.Invoke([action]{ Write-GuiLog 'WARN' $line }, [System.Windows.Threading.DispatcherPriority]::Normal)
         }
     }
     $onExit = [System.EventHandler]{
-        param($s, $e)
-        $null = $s.WaitForExit()  # flush the async output readers
-        $code = $s.ExitCode
+        $null = $args[0].WaitForExit()  # flush the async output readers
+        $code = $args[0].ExitCode
         $window.Dispatcher.Invoke([action]{
-            Set-GuiActionButtons -Enabled $true
+            Set-GuiActionButtonState -Enabled $true
             if ($code -eq 0) { Write-GuiLog 'OK' "BTFix -Mode $Mode finished." }
             elseif ($code -eq 2) { Write-GuiLog 'ERROR' "BTFix -Mode $Mode needs administrator rights - use the Elevate button and run it again." }
             else { Write-GuiLog 'WARN' "BTFix -Mode $Mode exited with code $code." }
@@ -697,18 +703,18 @@ $btnAutoFix.Add_Click({
         return
     }
 
-    Set-GuiActionButtons -Enabled $false
+    Set-GuiActionButtonState -Enabled $false
     try {
         Write-GuiLog 'ACTION' 'Beginning automated Bluetooth repair sequence...'
         $extra = @()
         if ($chkPreferInternal.IsChecked) { $extra += '-PreferInternal' }
         if ($chkDisableUsbSuspend.IsChecked) { $extra += '-DisableUsbSuspend' }
         if (-not (Start-GuiCliMode -Mode 'Fix' -ExtraArgs $extra)) {
-            Set-GuiActionButtons -Enabled $true
+            Set-GuiActionButtonState -Enabled $true
         }
     } catch {
         Write-GuiLog 'ERROR' "Repair could not start: $($_.Exception.Message)"
-        Set-GuiActionButtons -Enabled $true
+        Set-GuiActionButtonState -Enabled $true
     }
 })
 
@@ -732,15 +738,15 @@ $btnRollback.Add_Click({
         [System.Windows.MessageBox]::Show('Administrator rights are required to rollback hardware configurations.', 'Administrator Required', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
         return
     }
-    Set-GuiActionButtons -Enabled $false
+    Set-GuiActionButtonState -Enabled $false
     try {
         Write-GuiLog 'ACTION' 'Restoring hardware state from latest backup snapshot...'
         if (-not (Start-GuiCliMode -Mode 'Rollback')) {
-            Set-GuiActionButtons -Enabled $true
+            Set-GuiActionButtonState -Enabled $true
         }
     } catch {
         Write-GuiLog 'ERROR' "Rollback could not start: $($_.Exception.Message)"
-        Set-GuiActionButtons -Enabled $true
+        Set-GuiActionButtonState -Enabled $true
     }
 })
 

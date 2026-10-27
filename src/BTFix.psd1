@@ -10,11 +10,14 @@
     FunctionsToExport = @(
         'Get-BTFixRadio', 'Get-BTFixDiagnosis', 'New-BTFixBackup', 'Get-BTFixLatestBackup',
         'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Invoke-BTFixWindowsUpdate',
-        'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot'
+        'Write-BTFixReport', 'Write-BTFixReportJson', 'Write-BTFixLog', 'Test-BTFixAdministrator',
+        'Get-BTFixStateRoot', 'Test-BTFixInternalRadio', 'Test-BTFixRadioInstanceId',
+        'Resolve-BTFixWantedRadio', 'Restart-BTFixAudioStack', 'Get-BTFixLmpVersionName',
+        'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
-    AliasesToExport   = @()
+    AliasesToExport   = @('Get-BTFixRadioSpecs')
     PrivateData       = @{
         PSData = @{
             Tags       = @('Bluetooth', 'Driver', 'Windows', 'Repair', 'Code31')

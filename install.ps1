@@ -27,6 +27,10 @@ $ErrorActionPreference = 'Stop'
 
 $repoBase = "https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/$Branch"
 
+# Windows PowerShell 5.1 on older Windows 10 builds defaults to TLS 1.0 and
+# cannot negotiate github.com without this line.
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+
 # ----------------- Uninstallation -----------------
 if ($Uninstall) {
     Write-Host "`n=== Uninstalling Bluetooth Dongle Fix (BTFix) ===" -ForegroundColor Yellow
@@ -55,10 +59,19 @@ if ($Uninstall) {
         Write-Host "Removed '$binDir' from User PATH." -ForegroundColor Gray
     }
 
-    # Remove files
-    if (Test-Path -LiteralPath $InstallDir) {
-        Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
-        Write-Host "Removed directory: $InstallDir" -ForegroundColor Gray
+    # Remove program files, but keep backups and logs: the snapshots are the
+    # only way to undo a repair, so deleting them silently would strand any
+    # radio BTFix parked. The user can delete the folder manually if they
+    # really want everything gone.
+    foreach ($sub in @('bin', 'src', 'BTFix.ps1', 'BTFix-GUI.ps1', 'BTFix-GUI.bat', 'BTFix.bat', 'Run-Fix-As-Admin.bat')) {
+        $target = Join-Path $InstallDir $sub
+        if (Test-Path -LiteralPath $target) {
+            Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+    Write-Host "Removed program files under: $InstallDir" -ForegroundColor Gray
+    if (Test-Path -LiteralPath (Join-Path $InstallDir 'backups')) {
+        Write-Host "Kept snapshots and logs under $InstallDir (delete the folder manually if you do not need them)." -ForegroundColor Yellow
     }
 
     Write-Host "Uninstallation complete!`n" -ForegroundColor Green
@@ -124,6 +137,15 @@ foreach ($rel in $filesToDownload) {
     } catch {
         Write-Host "Warning: Could not download $rel from GitHub ($($_.Exception.Message))." -ForegroundColor Yellow
     }
+}
+
+# A partial install leaves shortcuts and PATH entries pointing at missing
+# files - refuse to finish when anything core is missing.
+$missing = @($filesToDownload | Where-Object { -not (Test-Path -LiteralPath (Join-Path $InstallDir ($_ -replace '/', '\'))) })
+if ($missing.Count -gt 0) {
+    Write-Host "Installation FAILED: these files could not be downloaded: $($missing -join ', ')" -ForegroundColor Red
+    Write-Host "Check your internet connection (and that branch '$Branch' exists), then re-run the installer." -ForegroundColor Red
+    exit 1
 }
 
 # Generate CMD wrappers in bin directory
