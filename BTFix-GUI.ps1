@@ -9,7 +9,12 @@
 
 [CmdletBinding()]
 param(
-    [switch]$AutoScan
+    [switch]$AutoScan,
+
+    # Build the window, run one hardware scan and exit before showing the
+    # dialog. Smoke test for CI: exit code 0 means the XAML loaded and the
+    # scan path completed without throwing.
+    [switch]$SelfTest
 )
 
 Set-StrictMode -Off
@@ -356,7 +361,7 @@ function Show-HardwareState {
         $tbName.FontSize = 13
         $tbName.Foreground = $brushConv.ConvertFromString('#F0F6FC')
         [System.Windows.Controls.Grid]::SetColumn($tbName, 0)
-        $titleGrid.Children.Add($tbName)
+        $null = $titleGrid.Children.Add($tbName)
 
         # Chipset match
         $chipset = @(Get-BTFixChipset -HardwareId ($r.HardwareIds -join ' '))[0]
@@ -366,9 +371,9 @@ function Show-HardwareState {
             $tbChip.FontSize = 11
             $tbChip.Foreground = $brushConv.ConvertFromString('#8B949E')
             [System.Windows.Controls.Grid]::SetColumn($tbChip, 1)
-            $titleGrid.Children.Add($tbChip)
+            $null = $titleGrid.Children.Add($tbChip)
         }
-        $sp.Children.Add($titleGrid)
+        $null = $sp.Children.Add($titleGrid)
 
         # Instance ID / Location
         $tbLoc = New-Object System.Windows.Controls.TextBlock
@@ -377,7 +382,7 @@ function Show-HardwareState {
         $tbLoc.Foreground = $brushConv.ConvertFromString('#6E7681')
         $tbLoc.Margin = New-Object System.Windows.Thickness(0, 2, 0, 6)
         $tbLoc.TextTrimming = [System.Windows.TextTrimming]::CharacterEllipsis
-        $sp.Children.Add($tbLoc)
+        $null = $sp.Children.Add($tbLoc)
 
         # Badges WrapPanel
         $wp = New-Object System.Windows.Controls.WrapPanel
@@ -399,9 +404,10 @@ function Show-HardwareState {
             $tbPlace.Foreground = $brushConv.ConvertFromString('#58A6FF')
         }
         $bPlace.Child = $tbPlace
-        $wp.Children.Add($bPlace)
+        $null = $wp.Children.Add($bPlace)
 
-        # Badge 2: Bluetooth LMP Spec
+        # Badge 2: Bluetooth LMP Spec (radio objects carry no LMP data; it lives
+        # in the per-device property store, so query it per instance)
         $bLmp = New-Object System.Windows.Controls.Border
         $bLmp.CornerRadius = New-Object System.Windows.CornerRadius(4)
         $bLmp.Padding = New-Object System.Windows.Thickness(6, 2, 6, 2)
@@ -410,13 +416,14 @@ function Show-HardwareState {
         $tbLmp = New-Object System.Windows.Controls.TextBlock
         $tbLmp.FontSize = 11
         $tbLmp.Foreground = $brushConv.ConvertFromString('#BC8CFF')
-        if ($r.LmpVersion) {
-            $tbLmp.Text = "$(Get-BTFixLmpVersionName $r.LmpVersion) (LMP $($r.LmpVersion))"
+        $spec = Get-BTFixRadioSpec -InstanceId $r.InstanceId
+        if ($null -ne $spec.LmpVersion) {
+            $tbLmp.Text = "$($spec.BluetoothVersion) (LMP $($spec.LmpVersion))"
         } else {
             $tbLmp.Text = 'LMP: Unknown / Blocked'
         }
         $bLmp.Child = $tbLmp
-        $wp.Children.Add($bLmp)
+        $null = $wp.Children.Add($bLmp)
 
         # Badge 3: Hardware Status
         $bStatus = New-Object System.Windows.Controls.Border
@@ -444,11 +451,11 @@ function Show-HardwareState {
             $tbStatus.Foreground = $brushConv.ConvertFromString('#F85149')
         }
         $bStatus.Child = $tbStatus
-        $wp.Children.Add($bStatus)
+        $null = $wp.Children.Add($bStatus)
 
         # Badge 4: Superiority Score
         if ($superiority) {
-            $scoreObj = @($superiority.Rankings | Where-Object { $_.Radio.InstanceId -eq $r.InstanceId })[0]
+            $scoreObj = @($superiority.Scores | Where-Object { $_.Radio.InstanceId -eq $r.InstanceId })[0]
             if ($scoreObj) {
                 $bScore = New-Object System.Windows.Controls.Border
                 $bScore.CornerRadius = New-Object System.Windows.CornerRadius(4)
@@ -468,13 +475,13 @@ function Show-HardwareState {
                     $tbScore.Foreground = $brushConv.ConvertFromString('#8B949E')
                 }
                 $bScore.Child = $tbScore
-                $wp.Children.Add($bScore)
+                $null = $wp.Children.Add($bScore)
             }
         }
 
-        $sp.Children.Add($wp)
+        $null = $sp.Children.Add($wp)
         $border.Child = $sp
-        $panelRadios.Children.Add($border)
+        $null = $panelRadios.Children.Add($border)
     }
 
     # Peripherals
@@ -486,7 +493,7 @@ function Show-HardwareState {
         $tbNone.Text = 'No paired Bluetooth peripherals found.'
         $tbNone.Foreground = $brushConv.ConvertFromString('#6E7681')
         $tbNone.FontSize = 12
-        $panelPeripherals.Children.Add($tbNone)
+        $null = $panelPeripherals.Children.Add($tbNone)
     } else {
         foreach ($p in $peripherals) {
             $bPer = New-Object System.Windows.Controls.Border
@@ -503,7 +510,7 @@ function Show-HardwareState {
             $tbPName.FontSize = 12
             $tbPName.FontWeight = [System.Windows.FontWeights]::SemiBold
             $tbPName.Foreground = $brushConv.ConvertFromString('#F0F6FC')
-            $dp.Children.Add($tbPName)
+            $null = $dp.Children.Add($tbPName)
 
             $tbPStatus = New-Object System.Windows.Controls.TextBlock
             $tbPStatus.FontSize = 11
@@ -518,9 +525,9 @@ function Show-HardwareState {
                 $tbPStatus.Text = "Code $($p.ProblemCode)"
                 $tbPStatus.Foreground = $brushConv.ConvertFromString('#D29922')
             }
-            $dp.Children.Add($tbPStatus)
+            $null = $dp.Children.Add($tbPStatus)
             $bPer.Child = $dp
-            $panelPeripherals.Children.Add($bPer)
+            $null = $panelPeripherals.Children.Add($bPer)
         }
     }
 
@@ -612,8 +619,14 @@ $btnAutoFix.Add_Click({
         if ($chkDisableUsbSuspend.IsChecked) { $params['DisableUsbSuspend'] = $true }
 
         $res = Invoke-BTFixRepair @params
-        Write-GuiLog 'OK' "Repair pipeline finished: $($res.Count) change(s) recorded."
-        
+        foreach ($s in $res.Steps) { Write-GuiLog 'INFO' "step: $s" }
+        Write-GuiLog 'OK' "Repair pipeline finished: $($res.Steps.Count) change(s) recorded."
+        if ($res.RebootRequired) {
+            Write-GuiLog 'WARN' 'Windows disabled the internal adapter, but a computer restart is required to release the hardware. Please restart your PC.'
+        } elseif (-not $res.Healthy) {
+            Write-GuiLog 'WARN' 'Some problems remain after the repair. Export a report and check docs/troubleshooting.md.'
+        }
+
         # Immediate state reload
         Show-HardwareState
     } catch {
@@ -649,8 +662,8 @@ $btnRollback.Add_Click({
     try {
         Write-GuiLog 'ACTION' 'Restoring hardware state from latest backup snapshot...'
         $restored = Invoke-BTFixRollback
-        if ($restored) {
-            Write-GuiLog 'OK' "Rollback applied to $($restored.Count) radio(s)."
+        if ($restored.Changed) {
+            Write-GuiLog 'OK' "Rollback applied to $($restored.Restored.Count) radio(s): $($restored.Restored -join ', ')"
         } else {
             Write-GuiLog 'WARN' 'No previous snapshot found or no changes needed restoring.'
         }
@@ -675,6 +688,19 @@ $btnExport.Add_Click({
 # Initialize UI
 Show-ElevationBadge
 Show-HardwareState
+
+if ($SelfTest) {
+    try {
+        Write-Host ("SELFTEST OK radios={0} peripherals={1} loglines={2}" -f
+            @(Get-BTFixRadio).Count, @(Get-BTFixPairedDevice).Count, $txtConsole.Document.Blocks.Count)
+        $window.Close()
+        exit 0
+    } catch {
+        Write-Host "SELFTEST FAILED: $($_.Exception.Message)" -ForegroundColor Red
+        exit 1
+    }
+}
+
 if ($AutoScan) { Write-GuiLog 'INFO' 'Launched with -AutoScan switch.' }
 
 $window.ShowDialog() | Out-Null
