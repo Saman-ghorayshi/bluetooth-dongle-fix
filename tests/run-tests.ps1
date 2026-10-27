@@ -520,6 +520,16 @@ Describe 'superiority evaluation' {
     }
 }
 
+Describe 'radio targeting' {
+    It 'refuses to repair when an explicit -Radio matches nothing (no fallback, no snapshot)' {
+        # Read-only path: the early return happens before any mutation.
+        $result = Invoke-BTFixRepair -Radio 'USB\DOES-NOT-EXIST'
+        Assert-False $result.Healthy
+        Assert-True ($null -eq $result.Backup)
+        Assert-Equal 0 @($result.Steps).Count
+    }
+}
+
 Describe 'integrity' {
     function New-IntegrityRoot {
         [CmdletBinding(SupportsShouldProcess)]

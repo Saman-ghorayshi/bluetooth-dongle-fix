@@ -82,6 +82,18 @@ if ($integrity.BaselineSource -eq 'none' -and (Test-BTFixAdministrator)) {
     $null = Save-BTFixIntegrityBaseline -ScriptRoot $PSScriptRoot
 }
 
+# An explicit -Radio that matches nothing must not silently fall back to the
+# default selection - that selection may disable the radio the user was
+# actually pointing at.
+if ($Radio) {
+    $radioMatch = @(Get-BTFixRadio -Radio $Radio)
+    if ($radioMatch.Count -eq 0) {
+        Write-Host "No Bluetooth radio matches -Radio '$Radio'." -ForegroundColor Red
+        Write-Host 'Run -Mode Check to list the radios and their exact instance ids.' -ForegroundColor Yellow
+        exit 2
+    }
+}
+
 # ---------------------------------------------------------------- elevation
 
 function Invoke-SelfElevated {

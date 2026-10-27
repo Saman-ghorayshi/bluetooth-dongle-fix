@@ -666,6 +666,23 @@ function Invoke-BTFixRepair {
     Write-BTFixLog -Message "diagnosis: $($diagnosis.Classification) (confidence $($diagnosis.Confidence))" -Level 'STEP' -Path $LogPath
     foreach ($e in $diagnosis.Evidence) { Write-BTFixLog -Message $e -Path $LogPath }
 
+    # An explicit -Radio that matches nothing must never fall through to the
+    # default selection: that could disable a radio the user did not point at.
+    if ($Radio) {
+        $named = @($diagnosis.Radios | Where-Object { $_.InstanceId -eq $Radio })
+        if ($named.Count -eq 0) {
+            Write-BTFixLog -Message "no radio matches -Radio '$Radio' - refusing to pick a different one. Run -Mode Check to list exact instance ids." -Level 'ERROR' -Path $LogPath
+            return [pscustomobject]@{
+                Changed        = $false
+                Healthy        = $false
+                RebootRequired = $false
+                Diagnosis      = $diagnosis
+                Steps          = @()
+                Backup         = $null
+            }
+        }
+    }
+
     if ($diagnosis.Broken.Count -eq 0) {
         Write-BTFixLog -Message 'every radio is healthy - only the optional repairs remain' -Level 'OK' -Path $LogPath
     }
