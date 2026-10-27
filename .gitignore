@@ -34,3 +34,8 @@ desktop.ini
 # Local state produced by the tool
 BTFix-state/
 *.log
+
+# Generated per install/build; never commit
+file-hashes.json
+BTFix-v*.zip
+SHA256SUMS.txt

@@ -32,6 +32,26 @@ irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/main/
 
 ---
 
+## 📦 Releases (pinned & hash-verified installs)
+
+The one-liner always tracks `main`. For a pinned, verifiable install:
+
+1. Download `BTFix-vX.Y.Z.zip` and `SHA256SUMS.txt` from the [Releases page](https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/releases).
+2. Verify the download: `Get-FileHash .\BTFix-vX.Y.Z.zip` must match the line in `SHA256SUMS.txt`.
+3. Extract and run `BTFix-GUI.bat` — no install step needed. The zip carries
+   `file-hashes.json`, the integrity baseline BTFix checks before every
+   elevated run (see [Safety](#️-safety--reliability-principles)).
+
+CLI users can pin the installer to a tag; every downloaded file is then
+verified against the release manifest before the install completes:
+
+```powershell
+irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/v1.2.0/install.ps1 -OutFile install.ps1
+.\install.ps1 -Version v1.2.0
+```
+
+---
+
 ## 🖥️ Modern Native GUI (Zero Dependencies)
 
 BTFix includes a native Fluent dark-mode graphical user interface built on Windows Presentation Framework (WPF XAML) with **zero external packages or runtime installations**.

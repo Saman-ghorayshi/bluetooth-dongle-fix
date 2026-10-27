@@ -20,12 +20,20 @@ param(
     [switch]$NoGui,
     [switch]$NoShortcut,
     [switch]$Uninstall,
-    [string]$Branch = 'main'
+    [string]$Branch = 'main',
+    # Pin the install to a release tag (e.g. 'v1.2.0') instead of a branch.
+    # Tagged releases ship a file-hashes.json manifest that every downloaded
+    # file is verified against before the install completes.
+    [string]$Version = ''
 )
 
 $ErrorActionPreference = 'Stop'
 
-$repoBase = "https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/$Branch"
+$repoBase = if ($Version) {
+    "https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/$Version"
+} else {
+    "https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/$Branch"
+}
 
 # Windows PowerShell 5.1 on older Windows 10 builds defaults to TLS 1.0 and
 # cannot negotiate github.com without this line.
@@ -146,6 +154,35 @@ if ($missing.Count -gt 0) {
     Write-Host "Installation FAILED: these files could not be downloaded: $($missing -join ', ')" -ForegroundColor Red
     Write-Host "Check your internet connection (and that branch '$Branch' exists), then re-run the installer." -ForegroundColor Red
     exit 1
+}
+
+# Verify the downloaded files against the release's own hash manifest when
+# one exists (tagged releases ship file-hashes.json). A mismatch means the
+# download is not what the release shipped - refuse to finish.
+try {
+    $remoteManifest = Join-Path $env:TEMP ("btfix-manifest-" + [guid]::NewGuid().ToString('N') + ".json")
+    $wc.DownloadFile("$repoBase/file-hashes.json", $remoteManifest)
+    $manifest = Get-Content -LiteralPath $remoteManifest -Raw | ConvertFrom-Json
+    $bad = @()
+    foreach ($prop in $manifest.PSObject.Properties) {
+        $localFile = Join-Path $InstallDir ($prop.Name.Replace('/', '\'))
+        if (Test-Path -LiteralPath $localFile) {
+            if ((Get-FileHash -LiteralPath $localFile -Algorithm SHA256).Hash -ne $prop.Value) {
+                $bad += $prop.Name
+            }
+        } else {
+            $bad += "$($prop.Name) (missing)"
+        }
+    }
+    Remove-Item -LiteralPath $remoteManifest -Force -ErrorAction SilentlyContinue
+    if ($bad.Count -gt 0) {
+        Write-Host "Installation FAILED: integrity check failed for: $($bad -join ', ')" -ForegroundColor Red
+        Write-Host 'The downloaded files do not match the release manifest. Do not run them; re-download or pin a release with -Version.' -ForegroundColor Red
+        exit 1
+    }
+    Write-Host 'Verified every file against the release hash manifest.' -ForegroundColor DarkGray
+} catch {
+    Write-Host 'Note: no hash manifest at the requested branch/tag - skipping release verification.' -ForegroundColor DarkGray
 }
 
 # Record the SHA256 of every code file as the integrity baseline. It lives in
