@@ -9,8 +9,6 @@ Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'Health.psm1')
 Import-Module (Join-Path $PSScriptRoot 'Superiority.psm1') 
 
-$script:BluetoothClassGuid = '{E0CBF06C-CD8B-4647-BB8F-263B43F0C0B74}'
-
 function Write-BTFixLog {
     [CmdletBinding()]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
@@ -127,7 +125,7 @@ function Get-BTFixRadio {
         $problem = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode'
         $status = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_ProblemStatus'
         $driver = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_DriverVersion'
-        $provider = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_ProblemProvider'
+        $provider = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_DriverProvider'
         $ids = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_HardwareIds'
         $loc = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_LocationInfo'
         $parent = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_Parent'

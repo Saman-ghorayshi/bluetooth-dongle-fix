@@ -10,7 +10,7 @@ if %errorLevel% neq 0 (
     exit /b
 )
 
-title BTFix - Bluetooth Dongle Fix & Repair
+title BTFix - Bluetooth Dongle Fix ^& Repair
 echo ========================================================
 echo   BTFix: Windows Bluetooth Dongle Conflict & Repair Tool
 echo ========================================================
