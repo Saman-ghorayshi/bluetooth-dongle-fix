@@ -593,4 +593,163 @@ Describe 'integrity' {
     }
 }
 
+Describe 'repair pipeline (mocked)' {
+    # Functions defined via ". $module {...}" are dot-sourced into the
+    # module's own scope (plain "&" would run in a child scope and the
+    # function definitions would die with it), so module-internal calls
+    # resolve to these mocks: the whole repair pipeline runs without
+    # pnputil, services, elevation, or sleeps.
+    $btfixModule = Get-Module BTFix
+    Assert-True ($null -ne $btfixModule) 'BTFix module not loaded'
+
+    . $btfixModule {
+        $script:PipelineMock = @{ Calls = 0; Pnp = @(); AlwaysConflict = $false }
+
+        function New-PipelineRadio {
+            [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Test mock: builds data, mutates nothing')]
+            param([string]$Id, [string]$Name, [int]$Code, [string]$Status, [bool]$Internal)
+            [pscustomobject]@{
+                InstanceId = $Id; FriendlyName = $Name; Status = $Status
+                ProblemCode = $Code; ProblemStatus = $null; DriverVersion = '1.0'
+                DriverProvider = $null; HardwareIds = @('USB\VID_0A12&PID_0001')
+                LocationInfo = ''; Parent = 'USB\ROOT_HUB30\X'
+                IsInternal = $Internal
+                IsHealthy = ($Status -eq 'OK' -and $Code -eq 0)
+                IsDisabled = ($Code -eq 22)
+            }
+        }
+
+        function Get-BTFixDiagnosis {
+            $script:PipelineMock.Calls++
+            $conflict = ($script:PipelineMock.Calls -eq 1) -or $script:PipelineMock.AlwaysConflict
+            $dongleCode = if ($conflict) { 31 } else { 0 }
+            $dongleStatus = if ($conflict) { 'Error' } else { 'OK' }
+            $dongle = New-PipelineRadio -Id 'USB\DONGLE' -Name 'CSR Dongle' -Code $dongleCode -Status $dongleStatus -Internal $false
+            $internal = New-PipelineRadio -Id 'USB\INTERNAL' -Name 'Realtek Bluetooth Adapter' -Code 0 -Status 'OK' -Internal $true
+            $radios = @($dongle, $internal)
+            return [pscustomobject]@{
+                Classification     = 'mock'
+                Confidence         = 'High'
+                Radios             = $radios
+                Healthy            = @($radios | Where-Object { $_.IsHealthy })
+                Broken             = @($radios | Where-Object { -not $_.IsHealthy -and -not $_.IsDisabled })
+                Disabled           = @($radios | Where-Object { $_.IsDisabled })
+                Evidence           = @('mock evidence')
+                RecommendedActions = @('mock action')
+            }
+        }
+
+        # The real safety guard reads the device class through Get-PnpDevice;
+        # the mock answers Bluetooth for radio-shaped ids and Net otherwise.
+        function Get-PnpDevice {
+            [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidOverwritingBuiltInCmdlets', '', Justification = 'Test mock: the safety guard must be exercised under its real name')]
+            param($InstanceId)
+            $class = if ($InstanceId -like 'USB\*') { 'Bluetooth' } else { 'Net' }
+            [pscustomobject]@{ Class = $class; InstanceId = $InstanceId }
+        }
+
+        function Get-BTFixServiceHealth {
+            [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Test mock: never mutates anything')]
+            param()
+            return @()
+        }
+        function Restart-BTFixStack {
+            [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Test mock: never mutates anything')]
+            param()
+            return $false
+        }
+        function Restart-BTFixAudioStack {
+            [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Test mock: never mutates anything')]
+            param()
+        }
+        function Invoke-BTFixRescan {
+            [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Test mock: never mutates anything')]
+            param()
+            $null = (& $script:BTFixPnpRunner -PnpArguments @('/scan-devices'))
+            return $true
+        }
+    }
+
+    function Reset-PipelineMock {
+        [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSUseShouldProcessForStateChangingFunctions', '', Justification = 'Test helper: resets mock counters only')]
+        param()
+        & $btfixModule {
+            $script:PipelineMock.Calls = 0
+            $script:PipelineMock.Pnp = @()
+            $script:PipelineMock.AlwaysConflict = $false
+            $script:BTFixRebootRequired = $false
+            $script:BTFixPnpRunner = {
+                param([string[]]$PnpArguments)
+                $script:PipelineMock.Pnp += ,@($PnpArguments)
+                $global:LASTEXITCODE = 0
+                return 'MOCKED PNP OUTPUT'
+            }
+        }
+    }
+
+    It 'runs the conflict repair sequence: park internal, remove broken dongle, rescan' {
+        Reset-PipelineMock
+        $dir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-pipeline-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $result = Invoke-BTFixRepair -Radio 'USB\DONGLE' -BackupPath $dir
+            Assert-True $result.Healthy
+            Assert-True ($result.Steps -contains 'disabled USB\INTERNAL')
+            $backup = & $btfixModule { $script:PipelineMock.Pnp }
+            Assert-Equal '/disable-device' $backup[0][0]
+            Assert-Equal 'USB\INTERNAL'    $backup[0][1]
+            Assert-Equal '/remove-device'  $backup[1][0]
+            Assert-Equal 'USB\DONGLE'      $backup[1][1]
+            Assert-Equal '/scan-devices'   $backup[2][0]
+            Assert-True (Test-Path -LiteralPath $result.Backup) 'expected a snapshot file'
+        } finally {
+            Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'keeps the working internal radio when -PreferInternal is set and the dongle stays broken' {
+        Reset-PipelineMock
+        & $btfixModule { $script:PipelineMock.AlwaysConflict = $true }
+        $dir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-pipeline-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $result = Invoke-BTFixRepair -PreferInternal -BackupPath $dir
+            Assert-False $result.Healthy
+            Assert-True (@($result.Steps | Where-Object { $_ -like 'kept the working radio*' }).Count -ge 1)
+            $calls = & $btfixModule { $script:PipelineMock.Pnp }
+            Assert-Equal '/remove-device' $calls[0][0]
+            Assert-Equal 'USB\DONGLE'     $calls[0][1]
+            Assert-Equal 0 @($calls | Where-Object { $_[0] -eq '/disable-device' }).Count 'no radio should be disabled when the preferred one is healthy'
+        } finally {
+            Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'safety guard refuses to mutate non-Bluetooth devices' {
+        Reset-PipelineMock
+        $threw = $false
+        try {
+            # Invoke-BTFixPnp is internal to the module: call it in module scope.
+            $null = & $btfixModule { Invoke-BTFixPnp -Arguments @('/disable-device', 'PCI\VEN_1234&DEV_5678') } 2>$null
+        } catch {
+            $threw = $true
+        }
+        Assert-True $threw 'expected the safety guard to throw for a non-Bluetooth target'
+        $calls = & $btfixModule { $script:PipelineMock.Pnp }
+        Assert-Equal 0 @($calls).Count 'the runner must not be called for a blocked target'
+    }
+
+    It 'flags a reboot when the runner reports pnputil exit 3010' {
+        Reset-PipelineMock
+        & $btfixModule {
+            $script:BTFixPnpRunner = {
+                param([string[]]$PnpArguments)
+                $global:LASTEXITCODE = 3010
+                return "reboot required (mocked): $($PnpArguments -join ' ')"
+            }
+        }
+        $null = & $btfixModule { Invoke-BTFixPnp -Arguments @('/enable-device', 'USB\DONGLE') }
+        $flagged = & $btfixModule { $script:BTFixRebootRequired }
+        Assert-True $flagged 'exit 3010 must set the reboot-required flag'
+    }
+}
+
 Write-Summary

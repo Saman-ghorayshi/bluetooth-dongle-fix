@@ -9,6 +9,12 @@ Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'Health.psm1')
 Import-Module (Join-Path $PSScriptRoot 'Superiority.psm1') 
 
+# Indirection point for the tests: Invoke-BTFixPnp runs everything through
+# this scriptblock, so the test suite can replace it with a recording mock
+# and exercise the whole repair pipeline without touching pnputil.
+$script:BTFixPnpRunner = { param([string[]]$PnpArguments) & pnputil @PnpArguments 2>&1 }
+$script:BTFixRebootRequired = $false
+
 function Write-BTFixLog {
     [CmdletBinding()]
     [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
@@ -67,7 +73,7 @@ $script:BTFixIntegrityFiles = @(
 )
 $script:BTFixIntegrityKey = 'HKLM:\SOFTWARE\BTFix\Integrity'
 
-function Get-BTFixFileHashes {
+function Get-BTFixFileHash {
     [CmdletBinding()]
     [OutputType([hashtable])]
     param([Parameter(Mandatory)][string]$ScriptRoot)
@@ -154,10 +160,12 @@ function Test-BTFixIntegrity {
                 }
             }
         }
-    } catch { }
+    } catch {
+        Write-Verbose "integrity source scan failed: $($_.Exception.Message)"
+    }
     if ($result.BaselineSource -ne 'registry') { $result.BaselineSource = 'file' }
 
-    $current = Get-BTFixFileHashes -ScriptRoot $ScriptRoot
+    $current = Get-BTFixFileHash -ScriptRoot $ScriptRoot
     foreach ($rel in $script:BTFixIntegrityFiles) {
         if (-not $current.Contains($rel)) {
             if ($baseline.ContainsKey($rel)) { $result.Missing += $rel }
@@ -184,7 +192,7 @@ function Save-BTFixIntegrityBaseline {
     [OutputType([bool])]
     param([Parameter(Mandatory)][string]$ScriptRoot)
 
-    $hashes = Get-BTFixFileHashes -ScriptRoot $ScriptRoot
+    $hashes = Get-BTFixFileHash -ScriptRoot $ScriptRoot
     if ($hashes.Count -eq 0) { return $false }
 
     if (Test-BTFixAdministrator) {
@@ -499,20 +507,25 @@ function Invoke-BTFixPnp {
         [Parameter(Mandatory)][string[]]$Arguments,
         [string]$LogPath
     )
-    # Safety guard: ensure mutating commands only target Bluetooth USB devices
+    # Safety guard: ensure mutating commands only target Bluetooth devices.
+    # The lookup failure and the refusal are deliberately separate: a failed
+    # lookup only warns (pnputil will fail on its own), but a non-Bluetooth
+    # class is a hard stop - the throw must not be swallowed by the lookup's
+    # own catch.
     if ($Arguments.Count -ge 2 -and $Arguments[0] -in @('/disable-device', '/enable-device', '/remove-device')) {
         $targetId = $Arguments[1]
+        $dev = $null
         try {
             $dev = Get-PnpDevice -InstanceId $targetId -ErrorAction SilentlyContinue
-            if ($dev -and $dev.Class -ne 'Bluetooth') {
-                Write-BTFixLog -Message "SAFETY GUARD: Refusing to mutate non-Bluetooth device '$targetId' (Class: $($dev.Class))" -Level 'ERROR' -Path $LogPath
-                throw "Safety check blocked action on non-Bluetooth device: $targetId"
-            }
         } catch {
-            Write-BTFixLog -Message "Safety check warning: $($_.Exception.Message)" -Level 'WARN' -Path $LogPath
+            Write-BTFixLog -Message "Safety check could not read the device: $($_.Exception.Message)" -Level 'WARN' -Path $LogPath
+        }
+        if ($dev -and $dev.Class -ne 'Bluetooth') {
+            Write-BTFixLog -Message "SAFETY GUARD: Refusing to mutate non-Bluetooth device '$targetId' (Class: $($dev.Class))" -Level 'ERROR' -Path $LogPath
+            throw "Safety check blocked action on non-Bluetooth device: $targetId"
         }
     }
-    $out = & pnputil @Arguments 2>&1 | Out-String
+    $out = (& $script:BTFixPnpRunner -PnpArguments $Arguments) | Out-String
     $code = $LASTEXITCODE
     # 3010 = ERROR_SUCCESS_REBOOT_REQUIRED (see pnputil return values). Locale
     # independent, unlike matching pnputil's printed text.
