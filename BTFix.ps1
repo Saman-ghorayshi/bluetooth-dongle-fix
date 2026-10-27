@@ -64,6 +64,24 @@ Import-Module (Join-Path $PSScriptRoot 'src\ProblemCodes.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'src\Superiority.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'src\BTFix.psm1') -Force
 
+# ---------------------------------------------------------------- integrity
+
+# Every entry point that can run (or elevate) as admin verifies its code files
+# first: malware with user rights can rewrite anything under the install dir,
+# but not the HKLM baseline recorded by the first elevated run.
+$integrity = Test-BTFixIntegrity -ScriptRoot $PSScriptRoot
+if (-not $integrity.Ok) {
+    Write-Host 'INTEGRITY CHECK FAILED - these files do not match their recorded hashes:' -ForegroundColor Red
+    foreach ($m in $integrity.Mismatches) { Write-Host ("  modified: {0}" -f $m) -ForegroundColor Red }
+    foreach ($m in $integrity.Missing) { Write-Host ("  missing : {0}" -f $m) -ForegroundColor Red }
+    Write-Host 'Refusing to run. Reinstall BTFix, and scan the machine for malware.' -ForegroundColor Red
+    exit 3
+}
+if ($integrity.BaselineSource -eq 'none' -and (Test-BTFixAdministrator)) {
+    # First elevated run for this install: lock the baseline into HKLM.
+    $null = Save-BTFixIntegrityBaseline -ScriptRoot $PSScriptRoot
+}
+
 # ---------------------------------------------------------------- elevation
 
 function Invoke-SelfElevated {

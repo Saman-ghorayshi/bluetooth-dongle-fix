@@ -148,6 +148,24 @@ if ($missing.Count -gt 0) {
     exit 1
 }
 
+# Record the SHA256 of every code file as the integrity baseline. It lives in
+# HKLM once the first elevated run happens; this advisory JSON is the
+# reference until then. Key names use backslash paths to match the module's
+# own integrity file list.
+$hashes = [ordered]@{}
+foreach ($rel in $filesToDownload) {
+    $localFile = Join-Path $InstallDir ($rel.Replace('/', '\'))
+    if (Test-Path -LiteralPath $localFile) {
+        $hashes[$rel.Replace('/', '\')] = (Get-FileHash -LiteralPath $localFile -Algorithm SHA256).Hash
+    }
+}
+try {
+    $hashes | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $InstallDir 'file-hashes.json') -Encoding utf8
+    Write-Host "Recorded integrity baseline (file-hashes.json)." -ForegroundColor DarkGray
+} catch {
+    Write-Host "Notice: could not write the integrity baseline ($($_.Exception.Message))" -ForegroundColor Gray
+}
+
 # Generate CMD wrappers in bin directory
 $btfixCmd = Join-Path $binDir 'btfix.cmd'
 Set-Content -LiteralPath $btfixCmd -Value "@powershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0..\BTFix.ps1`" %*" -Encoding ASCII

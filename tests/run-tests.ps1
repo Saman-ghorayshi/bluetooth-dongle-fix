@@ -520,4 +520,67 @@ Describe 'superiority evaluation' {
     }
 }
 
+Describe 'integrity' {
+    function New-IntegrityRoot {
+        [CmdletBinding(SupportsShouldProcess)]
+        param()
+        $root = Join-Path ([IO.Path]::GetTempPath()) ('btfix-integrity-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $root -Force | Out-Null
+        Set-Content -LiteralPath (Join-Path $root 'BTFix.ps1') -Value 'fake entry script'
+        return $root
+    }
+
+    It 'accepts an untouched tree against a file baseline' {
+        $root = New-IntegrityRoot
+        try {
+            $hash = (Get-FileHash -LiteralPath (Join-Path $root 'BTFix.ps1') -Algorithm SHA256).Hash
+            @{ 'BTFix.ps1' = $hash } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'file-hashes.json')
+            $r = Test-BTFixIntegrity -ScriptRoot $root
+            Assert-True $r.Ok
+            Assert-Equal 'file' $r.BaselineSource
+            Assert-Equal 0 @($r.Mismatches).Count
+        } finally {
+            Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'detects a modified file' {
+        $root = New-IntegrityRoot
+        try {
+            $hash = (Get-FileHash -LiteralPath (Join-Path $root 'BTFix.ps1') -Algorithm SHA256).Hash
+            @{ 'BTFix.ps1' = $hash } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'file-hashes.json')
+            Set-Content -LiteralPath (Join-Path $root 'BTFix.ps1') -Value 'tampered!'
+            $r = Test-BTFixIntegrity -ScriptRoot $root
+            Assert-False $r.Ok
+            Assert-Equal 1 @($r.Mismatches).Count
+            Assert-True (@($r.Mismatches) -contains 'BTFix.ps1')
+        } finally {
+            Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'detects a file the baseline covers being deleted' {
+        $root = New-IntegrityRoot
+        try {
+            @{ 'src\Health.psm1' = 'DEADBEEF' } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $root 'file-hashes.json')
+            $r = Test-BTFixIntegrity -ScriptRoot $root
+            Assert-False $r.Ok
+            Assert-True (@($r.Missing) -contains 'src\Health.psm1')
+        } finally {
+            Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'treats a missing baseline as not-a-failure (dev tree, first run)' {
+        $root = New-IntegrityRoot
+        try {
+            $r = Test-BTFixIntegrity -ScriptRoot $root
+            Assert-True $r.Ok
+            Assert-Equal 'none' $r.BaselineSource
+        } finally {
+            Remove-Item -LiteralPath $root -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
 Write-Summary

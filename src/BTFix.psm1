@@ -52,6 +52,170 @@ function Get-BTFixStateRoot {
     return (Join-Path $env:LOCALAPPDATA 'BTFix')
 }
 
+# ---------------------------------------------------------------- integrity
+# The suite installs into a user-writable folder but its entry points ask for
+# elevation. A hash manifest BESIDE the scripts can be rewritten by the same
+# malware that swaps the scripts, so the authoritative baseline lives in HKLM
+# (user-level processes cannot write it), recorded by the first elevated run.
+# file-hashes.json written by the installer is the advisory fallback for
+# installs that have not been elevated yet.
+
+$script:BTFixIntegrityFiles = @(
+    'BTFix.ps1', 'BTFix-GUI.ps1',
+    'src\BTFix.psm1', 'src\BTFix.psd1', 'src\Chipsets.psm1', 'src\Findings.psm1',
+    'src\Health.psm1', 'src\ProblemCodes.psm1', 'src\Superiority.psm1'
+)
+$script:BTFixIntegrityKey = 'HKLM:\SOFTWARE\BTFix\Integrity'
+
+function Get-BTFixFileHashes {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory)][string]$ScriptRoot)
+    $hashes = [ordered]@{}
+    foreach ($rel in $script:BTFixIntegrityFiles) {
+        $path = Join-Path $ScriptRoot $rel
+        if (Test-Path -LiteralPath $path) {
+            $hashes[$rel] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
+        }
+    }
+    return $hashes
+}
+
+function Get-BTFixIntegrityBaseline {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param([Parameter(Mandatory)][string]$ScriptRoot)
+
+    # Registry store first: subkey per install root, 'Root' value identifies it.
+    try {
+        if (Test-Path -LiteralPath $script:BTFixIntegrityKey) {
+            foreach ($sub in (Get-ChildItem -LiteralPath $script:BTFixIntegrityKey -ErrorAction SilentlyContinue)) {
+                $props = Get-ItemProperty -LiteralPath $sub.PSPath -ErrorAction SilentlyContinue
+                if (-not $props -or -not $props.PSObject.Properties['Root']) { continue }
+                if ([string]$props.Root -ne $ScriptRoot) { continue }
+                $baseline = @{}
+                foreach ($rel in $script:BTFixIntegrityFiles) {
+                    if ($props.PSObject.Properties[$rel]) { $baseline[$rel] = [string]$props.PSObject.Properties[$rel].Value }
+                }
+                if ($baseline.Count -gt 0) { return $baseline }
+            }
+        }
+    } catch {
+        Write-Verbose "could not read the integrity registry store: $($_.Exception.Message)"
+    }
+
+    # JSON fallback next to the scripts (written by the installer).
+    $json = Join-Path $ScriptRoot 'file-hashes.json'
+    if (Test-Path -LiteralPath $json) {
+        try {
+            $data = Get-Content -LiteralPath $json -Raw | ConvertFrom-Json
+            $baseline = @{}
+            foreach ($rel in $script:BTFixIntegrityFiles) {
+                if ($data.PSObject.Properties[$rel]) { $baseline[$rel] = [string]$data.PSObject.Properties[$rel].Value }
+            }
+            if ($baseline.Count -gt 0) { return $baseline }
+        } catch {
+            Write-Verbose "could not parse file-hashes.json: $($_.Exception.Message)"
+        }
+    }
+    return $null
+}
+
+<#
+.SYNOPSIS
+Verifies the BTFix script files against the recorded integrity baseline.
+.DESCRIPTION
+Compares SHA256 hashes of every code file against the authoritative HKLM
+baseline (written by the first elevated run) or, failing that, the advisory
+file-hashes.json written by the installer. A baseline of 'none' means there
+is nothing to verify against (source tree, first run) - that is not a failure.
+#>
+function Test-BTFixIntegrity {
+    [CmdletBinding()]
+    [OutputType([object])]
+    param([Parameter(Mandatory)][string]$ScriptRoot)
+
+    $result = [pscustomobject]@{
+        Ok             = $true
+        BaselineSource = 'none'
+        Mismatches     = @()
+        Missing        = @()
+    }
+    $baseline = Get-BTFixIntegrityBaseline -ScriptRoot $ScriptRoot
+    if (-not $baseline) { return $result }
+
+    try {
+        if (Test-Path -LiteralPath $script:BTFixIntegrityKey) {
+            foreach ($sub in (Get-ChildItem -LiteralPath $script:BTFixIntegrityKey -ErrorAction SilentlyContinue)) {
+                $props = Get-ItemProperty -LiteralPath $sub.PSPath -ErrorAction SilentlyContinue
+                if ($props -and $props.PSObject.Properties['Root'] -and [string]$props.Root -eq $ScriptRoot) {
+                    $result.BaselineSource = 'registry'
+                    break
+                }
+            }
+        }
+    } catch { }
+    if ($result.BaselineSource -ne 'registry') { $result.BaselineSource = 'file' }
+
+    $current = Get-BTFixFileHashes -ScriptRoot $ScriptRoot
+    foreach ($rel in $script:BTFixIntegrityFiles) {
+        if (-not $current.Contains($rel)) {
+            if ($baseline.ContainsKey($rel)) { $result.Missing += $rel }
+            continue
+        }
+        if ($baseline.ContainsKey($rel) -and $baseline[$rel] -ne $current[$rel]) {
+            $result.Mismatches += $rel
+        }
+    }
+    if ($result.Mismatches.Count -gt 0 -or $result.Missing.Count -gt 0) { $result.Ok = $false }
+    return $result
+}
+
+<#
+.SYNOPSIS
+Records the current file hashes as the integrity baseline.
+.DESCRIPTION
+When elevated, writes the baseline to HKLM (the authoritative store - user-level
+processes cannot modify it). When not elevated, writes the advisory
+file-hashes.json next to the scripts (what the installer uses).
+#>
+function Save-BTFixIntegrityBaseline {
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$ScriptRoot)
+
+    $hashes = Get-BTFixFileHashes -ScriptRoot $ScriptRoot
+    if ($hashes.Count -eq 0) { return $false }
+
+    if (Test-BTFixAdministrator) {
+        if ($PSCmdlet.ShouldProcess($script:BTFixIntegrityKey, 'Record integrity baseline (HKLM)')) {
+            try {
+                $sub = Join-Path $script:BTFixIntegrityKey ([Guid]::NewGuid().ToString('N'))
+                New-Item -Path $sub -Force | Out-Null
+                New-ItemProperty -LiteralPath $sub -Name 'Root' -Value $ScriptRoot -PropertyType String -Force | Out-Null
+                foreach ($k in $hashes.Keys) {
+                    New-ItemProperty -LiteralPath $sub -Name $k -Value $hashes[$k] -PropertyType String -Force | Out-Null
+                }
+                Write-BTFixLog -Message "integrity baseline recorded in HKLM for $ScriptRoot" -Level 'OK'
+                return $true
+            } catch {
+                Write-BTFixLog -Message ("could not write the HKLM integrity baseline: " + $_.Exception.Message) -Level 'WARN'
+            }
+        }
+        return $false
+    }
+
+    if ($PSCmdlet.ShouldProcess((Join-Path $ScriptRoot 'file-hashes.json'), 'Record integrity baseline (file)')) {
+        try {
+            $hashes | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath (Join-Path $ScriptRoot 'file-hashes.json') -Encoding utf8
+            return $true
+        } catch {
+            Write-Verbose "could not write file-hashes.json: $($_.Exception.Message)"
+        }
+    }
+    return $false
+}
+
 function Get-BTFixProperty {
     [CmdletBinding()]
     param(
@@ -876,5 +1040,6 @@ Export-ModuleMember -Function @(
     'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Invoke-BTFixWindowsUpdate',
     'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot', 'Test-BTFixInternalRadio',
     'Get-BTFixLmpVersionName', 'Get-BTFixRadioSpecs', 'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio',
-    'Resolve-BTFixWantedRadio', 'Test-BTFixRadioInstanceId', 'Write-BTFixReportJson'
+    'Resolve-BTFixWantedRadio', 'Test-BTFixRadioInstanceId', 'Write-BTFixReportJson',
+    'Test-BTFixIntegrity', 'Save-BTFixIntegrityBaseline'
 )

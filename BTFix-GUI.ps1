@@ -32,6 +32,24 @@ Import-Module (Join-Path $scriptRoot 'src\ProblemCodes.psm1') -Force
 Import-Module (Join-Path $scriptRoot 'src\Superiority.psm1') -Force
 Import-Module (Join-Path $scriptRoot 'src\BTFix.psm1') -Force
 
+# The GUI elevates itself and runs repairs as admin: verify the code files
+# against the integrity baseline before doing anything else. Malware with
+# user rights can rewrite the install folder, but not the HKLM baseline.
+$integrity = Test-BTFixIntegrity -ScriptRoot $scriptRoot
+if (-not $integrity.Ok) {
+    $detail = "These files do not match their recorded hashes:`n" +
+        ($integrity.Mismatches | ForEach-Object { "  modified: $_" } | Out-String) +
+        ($integrity.Missing | ForEach-Object { "  missing: $_" } | Out-String) +
+        "`nBTFix refuses to start. Reinstall it, and scan the machine for malware."
+    [System.Windows.MessageBox]::Show($detail, 'BTFix - Integrity Check Failed',
+        [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Stop) | Out-Null
+    exit 3
+}
+if ($integrity.BaselineSource -eq 'none' -and (Test-BTFixAdministrator)) {
+    # First elevated run for this install: lock the baseline into HKLM.
+    $null = Save-BTFixIntegrityBaseline -ScriptRoot $scriptRoot
+}
+
 [xml]$xaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
