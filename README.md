@@ -1,7 +1,7 @@
 # 🎧 Bluetooth Dongle Fix (BTFix)
 
 <p align="center">
-  <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/actions"><img src="https://img.shields.io/badge/tests-53%2F53%20passing-brightgreen?style=flat-square&logo=github-actions" alt="Tests Status"></a>
+  <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/actions"><img src="https://img.shields.io/badge/tests-63%2F63%20passing-brightgreen?style=flat-square&logo=github-actions" alt="Tests Status"></a>
   <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License MIT"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?style=flat-square&logo=windows" alt="Platform Windows">
   <img src="https://img.shields.io/badge/powershell-5.1%20%7C%207%2B-5391FE?style=flat-square&logo=powershell" alt="PowerShell">
@@ -191,8 +191,11 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
 == repair wanted-radio selection [7 PASS]
 == instance-id classification [2 PASS]
 == superiority evaluation     [7 PASS]
+== radio targeting            [1 PASS]
+== integrity                  [4 PASS]
+== repair pipeline (mocked)   [5 PASS]
 ------------------------------------------------------------
-passed: 53   failed: 0
+passed: 63   failed: 0
 ```
 
 ---

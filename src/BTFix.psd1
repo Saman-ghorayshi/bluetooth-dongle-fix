@@ -1,6 +1,6 @@
 ﻿@{
     RootModule        = 'BTFix.psm1'
-    ModuleVersion     = '1.0.0'
+    ModuleVersion     = '1.2.0'
     GUID              = 'b7f0c2a4-9d3e-4c1a-8f5b-2e6d0a1c7f43'
     Author            = 'Saman Ghorayshi'
     CompanyName       = 'BTFix contributors'

@@ -3,6 +3,36 @@
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.2.0] - 2026-10-27
+
+### Security
+- **Integrity verification before every run.** The suite installs into a
+  user-writable folder but self-elevates, so malware with user rights could
+  swap the scripts and wait for an elevated run. Every start now checks the
+  SHA256 of the code files: the authoritative baseline lives in HKLM
+  (recorded by the first elevated run), the installer's `file-hashes.json`
+  is the advisory fallback, and a mismatch refuses to run (exit 3).
+- **Tag-pinned releases.** `-Version vX.Y.Z` pins the installer to a release
+  and verifies every downloaded file against the release's own manifest;
+  GitHub Releases ship the zip plus `SHA256SUMS.txt`.
+
+### Fixed
+- An explicit `-Radio` that matched nothing silently fell through to the
+  default selection, so `Fix -Radio <typo>` could disable a radio the user
+  did not point at. It is now a hard error (exit 2) in the CLI, and the
+  repair core refuses to guess.
+- **The PnP safety guard was decorative**: its `throw` sat inside its own
+  `try/catch`, which swallowed it and ran the mutation anyway. A
+  non-Bluetooth target is now a real hard stop (caught by the new guard
+  test).
+
+### Added
+- A repair mutex: a second concurrent repair/rollback (GUI child plus CLI)
+  fails fast with exit 2 instead of interleaving pnputil calls.
+- `pnputil` indirection point plus mocked end-to-end pipeline tests: the
+  conflict repair sequence, `-PreferInternal` behavior, the safety guard,
+  and reboot flagging all run without touching hardware.
+
 ## [1.1.0] - 2026-10-27
 
 ### Fixed
