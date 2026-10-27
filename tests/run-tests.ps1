@@ -166,6 +166,24 @@ Describe 'backups' {
             Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
+
+    It 'snapshots the usb power state of external radios for rollback' {
+        $dir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-test-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $radios = @(
+                (Get-LiveShapeRadio -Id 'USB\DONGLE' -Name 'Generic Bluetooth Radio' -Internal $false),
+                (Get-LiveShapeRadio -Id 'USB\INTERNAL' -Name 'Realtek Bluetooth Adapter' -Internal $true)
+            )
+            $file = New-BTFixBackup -Radios $radios -BackupPath $dir
+            $data = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+            Assert-True ($null -ne $data.UsbPowerSettings) 'expected UsbPowerSettings in the snapshot payload'
+            Assert-Equal 1 @($data.UsbPowerSettings).Count 'only external radios should be snapshotted'
+            Assert-Equal 'USB\DONGLE' $data.UsbPowerSettings[0].InstanceId
+            Assert-True ($data.UsbPowerSettings[0].RegistryPath -like '*USB\DONGLE\Device Parameters')
+        } finally {
+            Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 Describe 'report' {
@@ -262,6 +280,19 @@ Describe 'health checks' {
     It 'lists paired peripherals without throwing' {
         $paired = @(Get-BTFixPairedDevice)
         Assert-True ($null -ne $paired)
+    }
+
+    It 'builds the usb power path from the device itself, not its parent hub' {
+        # EnhancedPowerManagementEnabled lives under the radio's own Enum key
+        # (Microsoft KB 2900614), not under the parent hub the old code used.
+        $radios = @(Get-BTFixRadio | Where-Object { -not $_.IsInternal })
+        if ($radios.Count -eq 0) { return }
+        foreach ($r in $radios) {
+            $p = Get-BTFixUsbPowerSetting -InstanceId $r.InstanceId
+            Assert-True ($null -ne $p) 'expected a power-setting object'
+            Assert-True ($p.RegistryPath -like "*\$($r.InstanceId)\Device Parameters") "unexpected path: $($p.RegistryPath)"
+            Assert-True ($p.SuspendAllowed -is [bool])
+        }
     }
 }
 

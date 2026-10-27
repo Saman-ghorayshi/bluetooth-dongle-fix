@@ -266,10 +266,32 @@ function New-BTFixBackup {
     $dir = Join-Path $root 'backups'
     if (-not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
     $file = Join-Path $dir ('btfix-{0}.json' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+
+    # Record the USB power-management values of external radios so a rollback
+    # can undo -DisableUsbSuspend, not only the enable/disable decisions.
+    $usbPower = @()
+    foreach ($r in @($Radios)) {
+        if (-not $r -or $r.IsInternal) { continue }
+        try {
+            $p = Get-BTFixUsbPowerSetting -InstanceId $r.InstanceId
+            if ($p) {
+                $usbPower += [pscustomobject]@{
+                    InstanceId   = $r.InstanceId
+                    RegistryPath = $p.RegistryPath
+                    Value        = $p.Value
+                    Existed      = $p.Existed
+                }
+            }
+        } catch {
+            Write-Verbose "could not snapshot the usb power state of $($r.InstanceId)"
+        }
+    }
+
     $payload = [pscustomobject]@{
-        CreatedAt = (Get-Date).ToString('o')
-        Tool      = 'BTFix'
-        Radios    = @($Radios | Select-Object InstanceId, FriendlyName, Status, ProblemCode, IsDisabled, IsInternal, HardwareIds)
+        CreatedAt        = (Get-Date).ToString('o')
+        Tool             = 'BTFix'
+        Radios           = @($Radios | Select-Object InstanceId, FriendlyName, Status, ProblemCode, IsDisabled, IsInternal, HardwareIds)
+        UsbPowerSettings = @($usbPower)
     }
     if ($PSCmdlet.ShouldProcess($file, 'Write backup')) {
         $payload | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $file -Encoding utf8
@@ -635,6 +657,34 @@ function Invoke-BTFixRollback {
                 if ($PSCmdlet.ShouldProcess($r.InstanceId, 'Enable radio')) {
                     Invoke-BTFixPnp -Arguments @('/enable-device', $r.InstanceId) -LogPath $LogPath | Out-Null
                     $restored += $r.InstanceId
+                }
+            }
+        }
+
+        # Undo -DisableUsbSuspend: put every snapshotted USB power value back
+        # exactly as it was, including removing values BTFix created. Snapshots
+        # written before this feature have no such property (StrictMode-safe).
+        $usbSnapshot = @()
+        if ($backup.PSObject.Properties['UsbPowerSettings']) {
+            $usbSnapshot = @($backup.UsbPowerSettings)
+        }
+        foreach ($u in $usbSnapshot) {
+            if (-not $u -or -not $u.RegistryPath) { continue }
+            $orig = if ($u.Existed) { [int]$u.Value } else { $null }
+            try {
+                $now = Get-BTFixUsbPowerSetting -InstanceId $u.InstanceId
+            } catch {
+                continue
+            }
+            $nowVal = if ($now.Existed) { [int]$now.Value } else { $null }
+            if ($nowVal -eq $orig) { continue }
+            if ($PSCmdlet.ShouldProcess($u.RegistryPath, 'Restore USB power value')) {
+                if ($null -eq $orig) {
+                    Remove-ItemProperty -LiteralPath $u.RegistryPath -Name 'EnhancedPowerManagementEnabled' -ErrorAction SilentlyContinue
+                    Write-BTFixLog -Message "removed EnhancedPowerManagementEnabled on $($u.InstanceId) (did not exist before the repair)" -Level 'STEP' -Path $LogPath
+                    $restored += "usb-power:$($u.InstanceId)"
+                } elseif (Set-BTFixUsbPowerSetting -Setting $now -Value $orig -LogPath $LogPath) {
+                    $restored += "usb-power:$($u.InstanceId)"
                 }
             }
         }

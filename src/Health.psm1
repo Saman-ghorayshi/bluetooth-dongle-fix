@@ -136,39 +136,35 @@ function Remove-BTFixPairedDevice {
 Reads or changes the USB power-management flag of a radio.
 .DESCRIPTION
 "Allow the computer to turn off this device to save power" is stored per USB
-device as EnhancedPowerManagementEnabled. With it enabled, cheap dongles drop
-out of the Bluetooth stack after a few minutes of idle.
+device as EnhancedPowerManagementEnabled under the device's OWN instance key
+(Device Parameters) - not on the parent hub. With it enabled, cheap dongles
+drop out of the Bluetooth stack after a few minutes of idle.
 #>
 function Get-BTFixUsbPowerSetting {
     [CmdletBinding()]
     [OutputType([object])]
     param([Parameter(Mandatory)][string]$InstanceId)
 
-    $parent = $null
-    try {
-        $parent = (Get-PnpDeviceProperty -InstanceId $InstanceId -ErrorAction SilentlyContinue |
-            Where-Object { $_.KeyName -eq 'DEVPKEY_Device_Parent' } | Select-Object -First 1).Data
-    } catch {
-        $parent = $null
-    }
-    if (-not $parent) { return $null }
-
-    # the radio's USB device node holds the power settings
-    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Enum\$parent\Device Parameters"
+    $regPath = "HKLM:\SYSTEM\CurrentControlSet\Enum\$InstanceId\Device Parameters"
     $value = $null
+    $existed = $false
     try {
         if (Test-Path -LiteralPath $regPath) {
-            $value = (Get-ItemProperty -LiteralPath $regPath -Name 'EnhancedPowerManagementEnabled' -ErrorAction SilentlyContinue).EnhancedPowerManagementEnabled
+            $prop = Get-ItemProperty -LiteralPath $regPath -Name 'EnhancedPowerManagementEnabled' -ErrorAction SilentlyContinue
+            if ($prop) {
+                $value = $prop.EnhancedPowerManagementEnabled
+                $existed = $true
+            }
         }
     } catch {
         $value = $null
     }
     return [pscustomobject]@{
-        InstanceId  = $InstanceId
-        Parent      = $parent
-        RegistryPath = $regPath
+        InstanceId     = $InstanceId
+        RegistryPath   = $regPath
         SuspendAllowed = ($null -eq $value -or [int]$value -ne 0)
-        Value       = $value
+        Value          = $value
+        Existed        = $existed
     }
 }
 
@@ -178,20 +174,23 @@ function Set-BTFixUsbPowerSetting {
     param(
         [Parameter(Mandatory)][object]$Setting,
         [switch]$AllowSuspend,
+        # Explicit value (0/1). Overrides the -AllowSuspend switch; used by
+        # rollback to put back whatever the snapshot recorded.
+        [int]$Value,
         [string]$LogPath
     )
     if (-not (Test-BTFixAdministrator)) {
         Write-BTFixLog -Message 'not elevated — cannot change the USB power setting' -Level 'WARN' -Path $LogPath
         return $false
     }
-    $value = if ($AllowSuspend) { 1 } else { 0 }
+    $value = if ($PSBoundParameters.ContainsKey('Value')) { $Value } elseif ($AllowSuspend) { 1 } else { 0 }
     if ($PSCmdlet.ShouldProcess($Setting.RegistryPath, "Set EnhancedPowerManagementEnabled=$value")) {
         try {
             if (-not (Test-Path -LiteralPath $Setting.RegistryPath)) {
                 New-Item -Path $Setting.RegistryPath -Force | Out-Null
             }
             New-ItemProperty -LiteralPath $Setting.RegistryPath -Name 'EnhancedPowerManagementEnabled' -Value $value -PropertyType DWord -Force | Out-Null
-            Write-BTFixLog -Message "EnhancedPowerManagementEnabled=$value on $($Setting.Parent)" -Level 'OK' -Path $LogPath
+            Write-BTFixLog -Message "EnhancedPowerManagementEnabled=$value on $($Setting.InstanceId)" -Level 'OK' -Path $LogPath
             return $true
         } catch {
             Write-BTFixLog -Message ("could not set the USB power flag: " + $_.Exception.Message) -Level 'WARN' -Path $LogPath
