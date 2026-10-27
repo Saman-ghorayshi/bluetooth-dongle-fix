@@ -219,7 +219,11 @@ switch ($effectiveMode) {
         if (-not $out) { $out = Join-Path (Get-BTFixStateRoot -BackupPath $BackupPath) ('btfix-report-{0}.md' -f (Get-Date -Format 'yyyyMMdd-HHmmss')) }
         $text = Write-BTFixReport -OutputPath $out -LogPath $LogPath
         Write-Host $text
-        Write-Host "Report written to $out" -ForegroundColor Green
+        # The JSON twin sits next to the markdown (strip a .md/.markdown/.txt
+        # extension if there is one) so tools and issue templates can parse it.
+        $jsonOut = [IO.Path]::ChangeExtension($out, '.json')
+        $null = Write-BTFixReportJson -OutputPath $jsonOut -LogPath $LogPath
+        Write-Host "Report written to $out (+ $jsonOut)" -ForegroundColor Green
     }
 
     'Compare' {

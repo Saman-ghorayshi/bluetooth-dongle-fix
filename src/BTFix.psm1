@@ -104,11 +104,28 @@ function Test-BTFixInternalRadio {
     return [bool]($parent -like 'PCI\*')
 }
 
+function Test-BTFixRadioInstanceId {
+    <#
+    .SYNOPSIS
+    Decides whether a class-Bluetooth PnP instance is a host radio.
+    .DESCRIPTION
+    Everything that is not a radio lives under the BTH* enumerators: paired
+    peripherals and their AVRCP transports (BTHENUM), LE peripherals (BTHLE)
+    and the RFCOMM/BRB/LE protocol children (BTH\MS_*). Radios attach as USB
+    (dongles and internal combo cards), PCI, SDIO, ACPI or UART nodes, and
+    all of those pass this check.
+    #>
+    [CmdletBinding()]
+    [OutputType([bool])]
+    param([Parameter(Mandatory)][string]$InstanceId)
+    return ($InstanceId -notmatch '^(BTHENUM|BTHLE|BTH)\\')
+}
+
 <#
 .SYNOPSIS
 Enumerates every Bluetooth radio and returns a normalized inventory.
 .DESCRIPTION
-Radios are USB-attached devices in the Bluetooth device class. Each entry
+Radios are the host adapters in the Bluetooth device class. Each entry
 carries the state the repair engine needs: problem code, driver, and whether
 the node is currently disabled.
 #>
@@ -119,7 +136,7 @@ function Get-BTFixRadio {
 
     $radios = @()
     foreach ($d in (Get-PnpDevice -Class Bluetooth -ErrorAction SilentlyContinue)) {
-        if ($d.InstanceId -notlike 'USB\*') { continue }
+        if (-not (Test-BTFixRadioInstanceId -InstanceId $d.InstanceId)) { continue }
         if ($Radio -and $d.InstanceId -ne $Radio) { continue }
 
         $problem = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode'
@@ -819,10 +836,45 @@ function Write-BTFixReport {
     return $text
 }
 
+<#
+.SYNOPSIS
+Renders the diagnostics bundle as JSON (for tooling and issue attachments).
+#>
+function Write-BTFixReportJson {
+    [CmdletBinding()]
+    [OutputType([string])]
+    param(
+        [string]$OutputPath,
+        [string]$LogPath
+    )
+    $d = Get-BTFixDiagnosis
+    $payload = [pscustomobject]@{
+        generated          = (Get-Date).ToString('o')
+        tool               = 'BTFix'
+        machine            = $env:COMPUTERNAME
+        windows            = (Get-CimInstance Win32_OperatingSystem).Caption
+        classification     = $d.Classification
+        confidence         = $d.Confidence
+        radios             = @($d.Radios | Select-Object InstanceId, FriendlyName, Status, ProblemCode, DriverProvider, DriverVersion, IsInternal, IsHealthy, IsDisabled)
+        evidence           = @($d.Evidence)
+        recommendedActions = @($d.RecommendedActions)
+        services           = @(Get-Service bthserv, BTAGService, AudioEndpointBuilder, DeviceAssociationService -ErrorAction SilentlyContinue |
+            Select-Object Name, Status, StartType)
+    }
+    $text = $payload | ConvertTo-Json -Depth 6
+    if ($OutputPath) {
+        $dir = Split-Path -Parent $OutputPath
+        if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+        Set-Content -LiteralPath $OutputPath -Value $text -Encoding utf8
+        Write-BTFixLog -Message "json report written: $OutputPath" -Level 'OK' -Path $LogPath
+    }
+    return $text
+}
+
 Export-ModuleMember -Function @(
     'Get-BTFixRadio', 'Get-BTFixDiagnosis', 'New-BTFixBackup', 'Get-BTFixLatestBackup', 'Restart-BTFixAudioStack',
     'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Invoke-BTFixWindowsUpdate',
     'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot', 'Test-BTFixInternalRadio',
     'Get-BTFixLmpVersionName', 'Get-BTFixRadioSpecs', 'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio',
-    'Resolve-BTFixWantedRadio'
+    'Resolve-BTFixWantedRadio', 'Test-BTFixRadioInstanceId', 'Write-BTFixReportJson'
 )

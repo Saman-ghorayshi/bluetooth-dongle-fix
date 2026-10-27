@@ -45,6 +45,11 @@ function Assert-True {
     if (-not $Condition) { throw "expected a true condition $Because" }
 }
 
+function Assert-False {
+    param($Condition, [string]$Because = '')
+    if ($Condition) { throw "expected a false condition $Because" }
+}
+
 function Assert-Match {
     param([string]$Pattern, $Actual)
     if ("$Actual" -notmatch $Pattern) { throw "'$Actual' does not match '$Pattern'" }

@@ -531,12 +531,25 @@ function Show-HardwareState {
         }
     }
 
-    # Diagnosis Analysis
+    # Diagnosis Analysis. Run the findings engine LIVE (no -NoLive) so the
+    # environmental checks - stopped services, the machine-wide software
+    # radio switch, paired peripherals - surface in the GUI too, not just
+    # the radio inventory.
     $diag = Get-BTFixDiagnosis -Inventory $radios -NoLive
-    $findings = @(Get-BTFixFinding -Inventory $radios -NoLive)
+    $findings = @(Get-BTFixFinding -Inventory $radios)
     if ($findings.Count -gt 0) { Write-GuiLog 'WARN' "Discovered $($findings.Count) diagnostic finding(s)." }
 
-    if ($diag.Classification -eq 'RadioConflictOrDriverStartFailure') {
+    $radioState = Get-BTFixRadioSoftwareState
+
+    if ($radioState.IsRadioOff) {
+        $borderDiagnosis.Background = $brushConv.ConvertFromString('#2D2200')
+        $borderDiagnosis.BorderBrush = $brushConv.ConvertFromString('#D29922')
+        $txtDiagnosisIcon.Text = '✈️'
+        $txtDiagnosisTitle.Text = 'Bluetooth Radio Switched Off in Software'
+        $txtDiagnosisTitle.Foreground = $brushConv.ConvertFromString('#D29922')
+        $txtDiagnosisDetail.Text = 'Windows keeps a machine-wide radio switch and it is currently OFF - every adapter looks broken while it is. Turn Bluetooth back on in Settings > Network & internet > Bluetooth (or the Fn radio key).'
+        Write-GuiLog 'WARN' 'The software radio switch is OFF.'
+    } elseif ($diag.Classification -eq 'RadioConflictOrDriverStartFailure') {
         $borderDiagnosis.Background = $brushConv.ConvertFromString('#361214')
         $borderDiagnosis.BorderBrush = $brushConv.ConvertFromString('#F85149')
         $txtDiagnosisIcon.Text = '🔴'
@@ -581,6 +594,83 @@ function Show-HardwareState {
 
 # ----------------- Event Handlers -----------------
 
+$script:GuiCliProcess = $null
+
+function Set-GuiActionButtons {
+    param([bool]$Enabled)
+    foreach ($b in @($btnAutoFix, $btnScan, $btnRestartAudio, $btnRollback)) { $b.IsEnabled = $Enabled }
+}
+
+# Runs BTFix.ps1 in a hidden child process so the WPF window stays responsive
+# while pnputil and the service restarts do their (slow) work. The child
+# inherits this window's elevation; -NoElevation makes an unelevated child
+# fail fast with a clear message instead of spawning a second UAC prompt.
+function Start-GuiCliMode {
+    param([ValidateSet('Fix', 'Rollback')][string]$Mode, [string[]]$ExtraArgs = @())
+    if ($script:GuiCliProcess -and -not $script:GuiCliProcess.HasExited) {
+        Write-GuiLog 'WARN' 'A repair is already running - wait for it to finish.'
+        return $false
+    }
+    $cli = Join-Path $scriptRoot 'BTFix.ps1'
+    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', "`"$cli`"", '-Mode', $Mode, '-NoElevation') + $ExtraArgs
+
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    $psi.Arguments = ($argList -join ' ')
+    $psi.UseShellExecute = $false
+    $psi.CreateNoWindow = $true
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError = $true
+
+    $proc = New-Object System.Diagnostics.Process
+    $proc.StartInfo = $psi
+
+    # DataReceived fires on a threadpool thread: copy the payload and marshal
+    # every UI touch onto the window's dispatcher.
+    $onOut = [System.Diagnostics.DataReceivedEventHandler]{
+        param($s, $e)
+        if ($e.Data) {
+            $line = $e.Data
+            $window.Dispatcher.Invoke([action]{ Write-GuiLog 'INFO' $line }, [System.Windows.Threading.DispatcherPriority]::Normal)
+        }
+    }
+    $onErr = [System.Diagnostics.DataReceivedEventHandler]{
+        param($s, $e)
+        if ($e.Data) {
+            $line = $e.Data
+            $window.Dispatcher.Invoke([action]{ Write-GuiLog 'WARN' $line }, [System.Windows.Threading.DispatcherPriority]::Normal)
+        }
+    }
+    $onExit = [System.EventHandler]{
+        param($s, $e)
+        $null = $s.WaitForExit()  # flush the async output readers
+        $code = $s.ExitCode
+        $window.Dispatcher.Invoke([action]{
+            Set-GuiActionButtons -Enabled $true
+            if ($code -eq 0) { Write-GuiLog 'OK' "BTFix -Mode $Mode finished." }
+            elseif ($code -eq 2) { Write-GuiLog 'ERROR' "BTFix -Mode $Mode needs administrator rights - use the Elevate button and run it again." }
+            else { Write-GuiLog 'WARN' "BTFix -Mode $Mode exited with code $code." }
+            Show-HardwareState
+        }, [System.Windows.Threading.DispatcherPriority]::Normal)
+        $script:GuiCliProcess = $null
+    }
+
+    $proc.add_OutputDataReceived($onOut)
+    $proc.add_ErrorDataReceived($onErr)
+    $proc.add_Exited($onExit)
+    $proc.EnableRaisingEvents = $true
+
+    if (-not $proc.Start()) {
+        Write-GuiLog 'ERROR' 'Could not start the BTFix repair process.'
+        return $false
+    }
+    $proc.BeginOutputReadLine()
+    $proc.BeginErrorReadLine()
+    $script:GuiCliProcess = $proc
+    Write-GuiLog 'ACTION' "Started BTFix -Mode $Mode in the background. The full log is saved under %LOCALAPPDATA%\BTFix\logs."
+    return $true
+}
+
 $btnElevate.Add_Click({
     $script = $MyInvocation.MyCommand.Path
     if (-not $script) { $script = Join-Path $scriptRoot 'BTFix-GUI.ps1' }
@@ -607,35 +697,18 @@ $btnAutoFix.Add_Click({
         return
     }
 
-    $btnAutoFix.IsEnabled = $false
-    $btnScan.IsEnabled = $false
-    $btnRestartAudio.IsEnabled = $false
-    $btnRollback.IsEnabled = $false
-
+    Set-GuiActionButtons -Enabled $false
     try {
         Write-GuiLog 'ACTION' 'Beginning automated Bluetooth repair sequence...'
-        $params = @{}
-        if ($chkPreferInternal.IsChecked) { $params['PreferInternal'] = $true }
-        if ($chkDisableUsbSuspend.IsChecked) { $params['DisableUsbSuspend'] = $true }
-
-        $res = Invoke-BTFixRepair @params
-        foreach ($s in $res.Steps) { Write-GuiLog 'INFO' "step: $s" }
-        Write-GuiLog 'OK' "Repair pipeline finished: $($res.Steps.Count) change(s) recorded."
-        if ($res.RebootRequired) {
-            Write-GuiLog 'WARN' 'Windows disabled the internal adapter, but a computer restart is required to release the hardware. Please restart your PC.'
-        } elseif (-not $res.Healthy) {
-            Write-GuiLog 'WARN' 'Some problems remain after the repair. Export a report and check docs/troubleshooting.md.'
+        $extra = @()
+        if ($chkPreferInternal.IsChecked) { $extra += '-PreferInternal' }
+        if ($chkDisableUsbSuspend.IsChecked) { $extra += '-DisableUsbSuspend' }
+        if (-not (Start-GuiCliMode -Mode 'Fix' -ExtraArgs $extra)) {
+            Set-GuiActionButtons -Enabled $true
         }
-
-        # Immediate state reload
-        Show-HardwareState
     } catch {
-        Write-GuiLog 'ERROR' "Repair encountered an error: $($_.Exception.Message)"
-    } finally {
-        $btnAutoFix.IsEnabled = $true
-        $btnScan.IsEnabled = $true
-        $btnRestartAudio.IsEnabled = $true
-        $btnRollback.IsEnabled = $true
+        Write-GuiLog 'ERROR' "Repair could not start: $($_.Exception.Message)"
+        Set-GuiActionButtons -Enabled $true
     }
 })
 
@@ -659,17 +732,15 @@ $btnRollback.Add_Click({
         [System.Windows.MessageBox]::Show('Administrator rights are required to rollback hardware configurations.', 'Administrator Required', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
         return
     }
+    Set-GuiActionButtons -Enabled $false
     try {
         Write-GuiLog 'ACTION' 'Restoring hardware state from latest backup snapshot...'
-        $restored = Invoke-BTFixRollback
-        if ($restored.Changed) {
-            Write-GuiLog 'OK' "Rollback applied to $($restored.Restored.Count) radio(s): $($restored.Restored -join ', ')"
-        } else {
-            Write-GuiLog 'WARN' 'No previous snapshot found or no changes needed restoring.'
+        if (-not (Start-GuiCliMode -Mode 'Rollback')) {
+            Set-GuiActionButtons -Enabled $true
         }
-        Show-HardwareState
     } catch {
-        Write-GuiLog 'ERROR' "Rollback failed: $($_.Exception.Message)"
+        Write-GuiLog 'ERROR' "Rollback could not start: $($_.Exception.Message)"
+        Set-GuiActionButtons -Enabled $true
     }
 })
 
@@ -678,7 +749,9 @@ $btnExport.Add_Click({
         $desktop = [Environment]::GetFolderPath('Desktop')
         $reportFile = Join-Path $desktop ("BTFix-Report-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + ".md")
         Write-BTFixReport -OutputPath $reportFile
-        Write-GuiLog 'OK' "Full diagnostics bundle saved to: $reportFile"
+        $jsonFile = [IO.Path]::ChangeExtension($reportFile, '.json')
+        $null = Write-BTFixReportJson -OutputPath $jsonFile
+        Write-GuiLog 'OK' "Diagnostics bundle saved to: $reportFile (+ $jsonFile)"
         [System.Windows.MessageBox]::Show("Diagnostics report successfully saved to:`n$reportFile", 'Report Exported', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
     } catch {
         Write-GuiLog 'ERROR' "Failed to export report: $($_.Exception.Message)"

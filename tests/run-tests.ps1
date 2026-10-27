@@ -199,6 +199,21 @@ Describe 'report' {
             Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
+
+    It 'renders a machine-readable JSON twin' {
+        $dir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-test-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $file = Join-Path $dir 'report.json'
+            $text = Write-BTFixReportJson -OutputPath $file
+            Assert-True (Test-Path -LiteralPath $file)
+            $data = Get-Content -LiteralPath $file -Raw | ConvertFrom-Json
+            Assert-Equal 'BTFix' $data.tool
+            Assert-True ($null -ne $data.classification)
+            Assert-True ($data.services.Count -ge 1)
+        } finally {
+            Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
 }
 
 Describe 'tooling' {
@@ -428,6 +443,22 @@ Describe 'repair wanted-radio selection' {
 
     It 'returns nothing for an empty inventory' {
         Assert-True ($null -eq (Resolve-BTFixWantedRadio -Radios @()))
+    }
+}
+
+Describe 'instance-id classification' {
+    It 'rejects peripheral and protocol enumerators' {
+        Assert-False (Test-BTFixRadioInstanceId -InstanceId 'BTHENUM\DEV_1C5216F3AB89\7&88CFA05&0&BLUETOOTHDEVICE_1C5216F3AB89')
+        Assert-False (Test-BTFixRadioInstanceId -InstanceId 'BTHLE\DEV_9C19C21B51AA\7&1C0AED2F&0&9C19C21B51AA')
+        Assert-False (Test-BTFixRadioInstanceId -InstanceId 'BTH\MS_BTHBRB\6&216EF7FB&5&1')
+        Assert-False (Test-BTFixRadioInstanceId -InstanceId 'BTH\MS_RFCOMM\6&47D89BF&2&0')
+    }
+
+    It 'accepts USB dongles and non-USB host radios' {
+        Assert-True (Test-BTFixRadioInstanceId -InstanceId 'USB\VID_0A12&PID_0001\5&5E7D000&0&3')
+        Assert-True (Test-BTFixRadioInstanceId -InstanceId 'PCI\VEN_8086&DEV_2723&SUBSYS_00308086')
+        Assert-True (Test-BTFixRadioInstanceId -InstanceId 'SD\VID_0BDA&OID_0B77&REV_01.00\4&5B48B0C&0&2')
+        Assert-True (Test-BTFixRadioInstanceId -InstanceId 'ACPI\QCOM0211\0')
     }
 }
 
