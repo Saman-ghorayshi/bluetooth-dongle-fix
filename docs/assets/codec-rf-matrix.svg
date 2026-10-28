@@ -1,0 +1,218 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="100%" height="100%">
+  <defs>
+    <!-- Background Gradient -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B0F19" />
+      <stop offset="100%" stop-color="#111827" />
+    </linearGradient>
+
+    <!-- Card Backgrounds -->
+    <linearGradient id="cardGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1A2234" />
+      <stop offset="100%" stop-color="#131B2A" />
+    </linearGradient>
+
+    <!-- Accent Gradients -->
+    <linearGradient id="blueGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#38BDF8" />
+      <stop offset="100%" stop-color="#0284C7" />
+    </linearGradient>
+    <linearGradient id="greenGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#34D399" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <linearGradient id="amberGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FBBF24" />
+      <stop offset="100%" stop-color="#D97706" />
+    </linearGradient>
+    <linearGradient id="purpleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#C084FC" />
+      <stop offset="100%" stop-color="#9333EA" />
+    </linearGradient>
+
+    <!-- Card Glow Filter -->
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="4" stdDeviation="6" flood-color="#000000" flood-opacity="0.5" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="540" fill="url(#bgGrad)" />
+
+  <!-- Grid overlay -->
+  <g stroke="#1F293D" stroke-width="1" opacity="0.25">
+    <path d="M 0 60 L 960 60 M 0 120 L 960 120 M 0 180 L 960 180 M 0 240 L 960 240 M 0 300 L 960 300 M 0 360 L 960 360 M 0 420 L 960 420 M 0 480 L 960 480" />
+    <path d="M 120 0 L 120 540 M 240 0 L 240 540 M 360 0 L 360 540 M 480 0 L 480 540 M 600 0 L 600 540 M 720 0 L 720 540 M 840 0 L 840 540" />
+  </g>
+
+  <!-- Header Section -->
+  <g id="header" transform="translate(40, 36)">
+    <rect x="0" y="0" width="168" height="26" rx="13" fill="#1E293B" stroke="#334155" stroke-width="1" />
+    <circle cx="12" cy="13" r="4" fill="#38BDF8" />
+    <text x="24" y="17" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700" letter-spacing="0.8">SUPERIORITY ENGINE</text>
+    <text x="180" y="20" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="20" font-weight="800" letter-spacing="-0.5">RF Antenna Environment &amp; Codec Bandwidth Matrix</text>
+    <text x="0" y="44" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13">Why physical antenna isolation beats internal combo cards on high-bitrate LDAC, AAC &amp; LE Audio streams</text>
+  </g>
+
+  <!-- Left Column: Antenna Placement & RF Shielding (Width: 270) -->
+  <g id="col-rf" transform="translate(40, 105)">
+    <rect width="270" height="400" rx="12" fill="url(#cardGrad)" stroke="#1F293D" stroke-width="1.5" filter="url(#shadow)" />
+    
+    <!-- Col Header -->
+    <rect x="16" y="16" width="32" height="32" rx="8" fill="#0C4A6E" />
+    <text x="32" y="38" text-anchor="middle" font-size="16">📡</text>
+    <text x="56" y="32" fill="#38BDF8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700">Antenna Clearance</text>
+    <text x="56" y="46" fill="#64748B" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">Placement &amp; Chassis Impact</text>
+
+    <!-- Card 1: External USB Dongle -->
+    <g transform="translate(16, 68)">
+      <rect width="238" height="96" rx="8" fill="#0F172A" stroke="#0284C7" stroke-width="1.2" />
+      <rect x="174" y="10" width="54" height="20" rx="10" fill="#0C4A6E" />
+      <text x="201" y="24" text-anchor="middle" fill="#38BDF8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700">+15 PTS</text>
+      <text x="12" y="24" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700">External USB Dongle</text>
+      <text x="12" y="42" fill="#34D399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">✓ Zero chassis shielding</text>
+      <text x="12" y="58" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">✓ Dedicated RF ground plane</text>
+      <text x="12" y="74" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">✓ Free of 2.4GHz Wi-Fi sharing</text>
+      <rect x="12" y="84" width="214" height="4" rx="2" fill="#1E293B" />
+      <rect x="12" y="84" width="205" height="4" rx="2" fill="#34D399" />
+    </g>
+
+    <!-- Card 2: Desktop PCIe Card -->
+    <g transform="translate(16, 174)">
+      <rect width="238" height="96" rx="8" fill="#0F172A" stroke="#334155" stroke-width="1" />
+      <rect x="174" y="10" width="54" height="20" rx="10" fill="#1E293B" />
+      <text x="201" y="24" text-anchor="middle" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700">+10 PTS</text>
+      <text x="12" y="24" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700">PCIe Desktop Antenna</text>
+      <text x="12" y="42" fill="#38BDF8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">✓ Rear magnetic shark-fin</text>
+      <text x="12" y="58" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">✓ Elevated away from GPU noise</text>
+      <text x="12" y="74" fill="#FBBF24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">⚠ Rear I/O shadow attenuation</text>
+      <rect x="12" y="84" width="214" height="4" rx="2" fill="#1E293B" />
+      <rect x="12" y="84" width="160" height="4" rx="2" fill="#38BDF8" />
+    </g>
+
+    <!-- Card 3: Internal Motherboard (Laptop) -->
+    <g transform="translate(16, 280)">
+      <rect width="238" height="106" rx="8" fill="#0F172A" stroke="#991B1B" stroke-width="1" />
+      <rect x="174" y="10" width="54" height="20" rx="10" fill="#450A0A" />
+      <text x="201" y="24" text-anchor="middle" fill="#F87171" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700">+0 PTS</text>
+      <text x="12" y="24" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700">Internal Combo Card</text>
+      <text x="12" y="42" fill="#F87171" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">✗ Laptop chassis metal shield (-12dB)</text>
+      <text x="12" y="58" fill="#F87171" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">✗ Shares antenna with 2.4G Wi-Fi</text>
+      <text x="12" y="74" fill="#FBBF24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">⚠ Time-sliced TDMA micro-stutters</text>
+      <rect x="12" y="88" width="214" height="4" rx="2" fill="#1E293B" />
+      <rect x="12" y="88" width="75" height="4" rx="2" fill="#F87171" />
+    </g>
+  </g>
+
+  <!-- Middle Column: LMP Specification Hierarchy (Width: 290) -->
+  <g id="col-lmp" transform="translate(330, 105)">
+    <rect width="290" height="400" rx="12" fill="url(#cardGrad)" stroke="#1F293D" stroke-width="1.5" filter="url(#shadow)" />
+
+    <!-- Col Header -->
+    <rect x="16" y="16" width="32" height="32" rx="8" fill="#4A044E" />
+    <text x="32" y="38" text-anchor="middle" font-size="16">⚡</text>
+    <text x="56" y="32" fill="#C084FC" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700">Bluetooth LMP Spec</text>
+    <text x="56" y="46" fill="#64748B" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">Hardware Feature Capability</text>
+
+    <!-- Spec 1: BT 5.4+ (LMP 13+) -->
+    <g transform="translate(16, 68)">
+      <rect width="258" height="58" rx="6" fill="#0F172A" stroke="#A855F7" stroke-width="1" />
+      <text x="12" y="24" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700">Bluetooth 5.4+ (LMP 13)</text>
+      <rect x="194" y="8" width="54" height="20" rx="10" fill="#3B0764" />
+      <text x="221" y="22" text-anchor="middle" fill="#E879F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700">95 PTS</text>
+      <text x="12" y="44" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">Periodic Advertising with Responses • Encrypted</text>
+    </g>
+
+    <!-- Spec 2: BT 5.2 / 5.3 (LMP 11-12) -->
+    <g transform="translate(16, 134)">
+      <rect width="258" height="74" rx="6" fill="#0F172A" stroke="#38BDF8" stroke-width="1.2" />
+      <text x="12" y="24" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700">Bluetooth 5.2 (LMP 11)</text>
+      <rect x="194" y="8" width="54" height="20" rx="10" fill="#0C4A6E" />
+      <text x="221" y="22" text-anchor="middle" fill="#38BDF8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700">85 PTS</text>
+      <text x="12" y="44" fill="#34D399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">LE Audio Isochronous Channels (CIS/BIS)</text>
+      <text x="12" y="60" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10">Enhanced ATT • Power Control • Connection Subrating</text>
+    </g>
+
+    <!-- Spec 3: BT 5.0 / 5.1 (LMP 9-10) -->
+    <g transform="translate(16, 216)">
+      <rect width="258" height="60" rx="6" fill="#0F172A" stroke="#334155" stroke-width="1" />
+      <text x="12" y="24" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700">Bluetooth 5.0 / 5.1 (LMP 9-10)</text>
+      <rect x="194" y="8" width="54" height="20" rx="10" fill="#1E293B" />
+      <text x="221" y="22" text-anchor="middle" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700">75-80 PTS</text>
+      <text x="12" y="44" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">2 Mbps High Speed • Coded PHY 4x Long Range</text>
+    </g>
+
+    <!-- Spec 4: BT 4.0 / 4.2 Legacy (LMP 6-8) -->
+    <g transform="translate(16, 284)">
+      <rect width="258" height="64" rx="6" fill="#0F172A" stroke="#991B1B" stroke-width="1" />
+      <text x="12" y="24" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="13" font-weight="700">Bluetooth 4.0 / 4.2 (LMP 6-8)</text>
+      <rect x="194" y="8" width="54" height="20" rx="10" fill="#450A0A" />
+      <text x="221" y="22" text-anchor="middle" fill="#F87171" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10" font-weight="700">50-60 PTS</text>
+      <text x="12" y="44" fill="#F87171" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">Legacy Smart Ready • High Buffer Overrun Risk</text>
+      <text x="12" y="58" fill="#64748B" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10">Missing 2M PHY • Fails modern TWS dual channel</text>
+    </g>
+
+    <!-- Formula Snippet -->
+    <g transform="translate(16, 356)">
+      <rect width="258" height="32" rx="6" fill="#1E293B" />
+      <text x="12" y="21" fill="#38BDF8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600">Score = Base(LMP) + RF(15) + Chassis(5)</text>
+    </g>
+  </g>
+
+  <!-- Right Column: Codec Bandwidth & Packet Loss (Width: 270) -->
+  <g id="col-codecs" transform="translate(640, 105)">
+    <rect width="280" height="400" rx="12" fill="url(#cardGrad)" stroke="#1F293D" stroke-width="1.5" filter="url(#shadow)" />
+
+    <!-- Col Header -->
+    <rect x="16" y="16" width="32" height="32" rx="8" fill="#064E3B" />
+    <text x="32" y="38" text-anchor="middle" font-size="16">🎧</text>
+    <text x="56" y="32" fill="#34D399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14" font-weight="700">Audio Codec Demands</text>
+    <text x="56" y="46" fill="#64748B" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11">Bitrate vs. Dropout Threshold</text>
+
+    <!-- Codec 1: LDAC -->
+    <g transform="translate(16, 68)">
+      <rect width="248" height="54" rx="6" fill="#0F172A" stroke="#334155" stroke-width="1" />
+      <text x="12" y="22" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700">Sony LDAC (990 kbps)</text>
+      <rect x="168" y="8" width="70" height="18" rx="9" fill="#450A0A" />
+      <text x="203" y="21" text-anchor="middle" fill="#FCA5A5" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="700">REQ ≥ 90 PTS</text>
+      <text x="12" y="40" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10">Needs dedicated RF dongle; drops on laptop cards</text>
+    </g>
+
+    <!-- Codec 2: aptX / aptX HD -->
+    <g transform="translate(16, 128)">
+      <rect width="248" height="54" rx="6" fill="#0F172A" stroke="#334155" stroke-width="1" />
+      <text x="12" y="22" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700">Qualcomm aptX HD (576 kbps)</text>
+      <rect x="168" y="8" width="70" height="18" rx="9" fill="#3B2A05" />
+      <text x="203" y="21" text-anchor="middle" fill="#FDE047" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="700">REQ ≥ 80 PTS</text>
+      <text x="12" y="40" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10">Low-latency audio; stable on clean 5.0+ adapters</text>
+    </g>
+
+    <!-- Codec 3: AAC -->
+    <g transform="translate(16, 188)">
+      <rect width="248" height="54" rx="6" fill="#0F172A" stroke="#0284C7" stroke-width="1" />
+      <text x="12" y="22" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700">Apple AAC (256 kbps VBR)</text>
+      <rect x="168" y="8" width="70" height="18" rx="9" fill="#0C4A6E" />
+      <text x="203" y="21" text-anchor="middle" fill="#7DD3FC" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="700">REQ ≥ 75 PTS</text>
+      <text x="12" y="40" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10">Windows in-box encoder sensitive to burst losses</text>
+    </g>
+
+    <!-- Codec 4: LC3 (LE Audio) -->
+    <g transform="translate(16, 248)">
+      <rect width="248" height="60" rx="6" fill="#0F172A" stroke="#059669" stroke-width="1.2" />
+      <text x="12" y="22" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700">Next-Gen LC3 (160 kbps)</text>
+      <rect x="168" y="8" width="70" height="18" rx="9" fill="#064E3B" />
+      <text x="203" y="21" text-anchor="middle" fill="#6EE7B7" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9" font-weight="700">LMP ≥ 11 ONLY</text>
+      <text x="12" y="40" fill="#34D399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10">Ultra-low 20ms latency • 50% less bandwidth</text>
+      <text x="12" y="52" fill="#94A3B8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="9">Broadcast Auracast multi-stream capability</text>
+    </g>
+
+    <!-- Real-World Example Comparison Pill -->
+    <g transform="translate(16, 316)">
+      <rect width="248" height="72" rx="8" fill="#132338" stroke="#38BDF8" stroke-width="1" />
+      <text x="12" y="20" fill="#38BDF8" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="700">USER BENCHMARK RESULT</text>
+      <text x="12" y="38" fill="#F1F5F9" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="700">BT 5.2 Internal on Laptop: 85 pts</text>
+      <text x="12" y="54" fill="#FBBF24" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10">⚡ Strong Candidate • Prone to Wi-Fi jitter</text>
+      <text x="12" y="66" fill="#34D399" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="10">External BT 5.4 Dongle: 100 pts (Flawless)</text>
+    </g>
+  </g>
+</svg>

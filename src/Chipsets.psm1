@@ -79,6 +79,20 @@ $script:ChipsetTable = @(
         Vendor      = 'Broadcom / HP'
         DriverHint  = 'Use the OEM driver shipped with the dongle.'
         DriverUrl   = ''
+    },
+    [pscustomobject]@{
+        Pattern     = 'VID_33FA&'
+        Family      = 'Barrot BR8651 / BR8041 USB 5.3'
+        Vendor      = 'Barrot Technology'
+        DriverHint  = 'Standard in-box Microsoft driver works on Windows 11. If Code 31 appears, park competing internal radio.'
+        DriverUrl   = ''
+    },
+    [pscustomobject]@{
+        Pattern     = 'VID_05AC&'
+        Family      = 'Apple Broadcom Bluetooth Host Controller'
+        Vendor      = 'Apple / Broadcom'
+        DriverHint  = 'Boot Camp Windows Apple Bluetooth controller. Use Apple Boot Camp support software drivers.'
+        DriverUrl   = 'https://support.apple.com/boot-camp'
     }
 )
 
