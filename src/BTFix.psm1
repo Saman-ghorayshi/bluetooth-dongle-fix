@@ -224,6 +224,34 @@ function Save-BTFixIntegrityBaseline {
     return $false
 }
 
+<#
+.SYNOPSIS
+Fetches all PnP properties for a device instance in a single RPC query.
+#>
+function Get-BTFixDevicePropertyMap {
+    [CmdletBinding()]
+    [OutputType([hashtable])]
+    param(
+        [Parameter(Mandatory)][string]$InstanceId
+    )
+
+    $props = @{}
+    try {
+        $raw = Get-PnpDeviceProperty -InstanceId $InstanceId -ErrorAction SilentlyContinue
+        if ($raw) {
+            foreach ($p in $raw) {
+                if ($p.KeyName) { $props[$p.KeyName] = $p.Data }
+                if ($p.Key) { $props[$p.Key] = $p.Data }
+            }
+        }
+    } catch {
+        $null = $_
+    }
+    return $props
+}
+
+Set-Alias -Name Get-BTFixDeviceProperties -Value Get-BTFixDevicePropertyMap -Description 'Backward-compatible alias for Get-BTFixDevicePropertyMap'
+
 function Get-BTFixProperty {
     [CmdletBinding()]
     param(
@@ -253,11 +281,18 @@ function Test-BTFixInternalRadio {
     #>
     [CmdletBinding()]
     [OutputType([bool])]
-    param([Parameter(Mandatory)][string]$InstanceId)
+    param(
+        [Parameter(Mandatory)][string]$InstanceId,
+        [hashtable]$Properties
+    )
 
     # 1. Removable capability check: external dongles report CM_DEVCAP_REMOVABLE (0x04)
     try {
-        $cap = Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_Capabilities'
+        $cap = if ($Properties -and $Properties.ContainsKey('DEVPKEY_Device_Capabilities')) {
+            $Properties['DEVPKEY_Device_Capabilities']
+        } else {
+            Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_Capabilities'
+        }
         if ($null -ne $cap) {
             $isRemovable = [bool]([int]$cap -band 4)
             if ($isRemovable) { return $false }
@@ -268,11 +303,19 @@ function Test-BTFixInternalRadio {
 
     # 2. Container ID check: internal radios share the computer chassis container
     $systemContainer = '{00000000-0000-0000-FFFF-FFFFFFFFFFFF}'
-    $container = Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_ContainerId'
+    $container = if ($Properties -and $Properties.ContainsKey('DEVPKEY_Device_ContainerId')) {
+        $Properties['DEVPKEY_Device_ContainerId']
+    } else {
+        Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_ContainerId'
+    }
     if ($container) { return ([string]$container).ToUpperInvariant() -eq $systemContainer }
 
     # 3. Fallback for systems that do not expose a container id: parent PCI bus
-    $parent = Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_Parent'
+    $parent = if ($Properties -and $Properties.ContainsKey('DEVPKEY_Device_Parent')) {
+        $Properties['DEVPKEY_Device_Parent']
+    } else {
+        Get-BTFixProperty -InstanceId $InstanceId -KeyName 'DEVPKEY_Device_Parent'
+    }
     return [bool]($parent -like 'PCI\*')
 }
 
@@ -311,13 +354,14 @@ function Get-BTFixRadio {
         if (-not (Test-BTFixRadioInstanceId -InstanceId $d.InstanceId)) { continue }
         if ($Radio -and $d.InstanceId -ne $Radio) { continue }
 
-        $problem = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode'
-        $status = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_ProblemStatus'
-        $driver = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_DriverVersion'
-        $provider = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_DriverProvider'
-        $ids = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_HardwareIds'
-        $loc = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_LocationInfo'
-        $parent = Get-BTFixProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_Parent'
+        $props = Get-BTFixDevicePropertyMap -InstanceId $d.InstanceId
+        $problem = if ($props.ContainsKey('DEVPKEY_Device_ProblemCode')) { $props['DEVPKEY_Device_ProblemCode'] } else { $null }
+        $status = if ($props.ContainsKey('DEVPKEY_Device_ProblemStatus')) { $props['DEVPKEY_Device_ProblemStatus'] } else { $null }
+        $driver = if ($props.ContainsKey('DEVPKEY_Device_DriverVersion')) { $props['DEVPKEY_Device_DriverVersion'] } else { $null }
+        $provider = if ($props.ContainsKey('DEVPKEY_Device_DriverProvider')) { $props['DEVPKEY_Device_DriverProvider'] } else { $null }
+        $ids = if ($props.ContainsKey('DEVPKEY_Device_HardwareIds')) { $props['DEVPKEY_Device_HardwareIds'] } else { $null }
+        $loc = if ($props.ContainsKey('DEVPKEY_Device_LocationInfo')) { $props['DEVPKEY_Device_LocationInfo'] } else { $null }
+        $parent = if ($props.ContainsKey('DEVPKEY_Device_Parent')) { $props['DEVPKEY_Device_Parent'] } else { $null }
 
         $radios += [pscustomobject]@{
             InstanceId      = $d.InstanceId
@@ -330,9 +374,10 @@ function Get-BTFixRadio {
             HardwareIds     = $ids
             LocationInfo    = $loc
             Parent          = $parent
-            IsInternal      = (Test-BTFixInternalRadio -InstanceId $d.InstanceId)
+            IsInternal      = (Test-BTFixInternalRadio -InstanceId $d.InstanceId -Properties $props)
             IsHealthy       = ([string]$d.Status -eq 'OK' -and (-not $problem -or [int]$problem -eq 0))
             IsDisabled      = ([int]$problem -eq 22)
+            AllProperties   = $props
         }
     }
     return $radios
@@ -1140,8 +1185,9 @@ function Write-BTFixReportJson {
     return $text
 }
 
-Export-ModuleMember -Function @(
-    'Get-BTFixRadio', 'Get-BTFixDiagnosis', 'New-BTFixBackup', 'Get-BTFixLatestBackup', 'Restart-BTFixAudioStack',
+# Export module members
+Export-ModuleMember -Alias @('Get-BTFixDeviceProperties') -Function @(
+    'Get-BTFixRadio', 'Get-BTFixDevicePropertyMap', 'Get-BTFixDiagnosis', 'New-BTFixBackup', 'Get-BTFixLatestBackup', 'Restart-BTFixAudioStack',
     'Invoke-BTFixRepair', 'Invoke-BTFixRollback', 'Invoke-BTFixWindowsUpdate',
     'Write-BTFixReport', 'Write-BTFixLog', 'Test-BTFixAdministrator', 'Get-BTFixStateRoot', 'Test-BTFixInternalRadio',
     'Get-BTFixLmpVersionName', 'Get-BTFixRadioSpecs', 'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio',

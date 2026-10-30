@@ -1,4 +1,4 @@
-# BTFix test suite.
+﻿# BTFix test suite.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
 #

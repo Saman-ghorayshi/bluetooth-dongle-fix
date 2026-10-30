@@ -88,7 +88,15 @@ function Get-BTFixPairedDevice {
         if ($d.InstanceId -notlike 'BTHENUM*' -and $d.InstanceId -notlike 'BTHLE*') { continue }
         $statusStr = [string]$d.Status
         $code = 0
-        if ($statusStr -ne 'OK') {
+        if ($d.PSObject.Properties['Present'] -and $d.Present -eq $false) {
+            $code = 45
+        } elseif ($d.PSObject.Properties['Problem'] -and $d.Problem) {
+            if (Get-Command 'Get-BTFixProblemCodeByName' -ErrorAction SilentlyContinue) {
+                $code = Get-BTFixProblemCodeByName -Name ([string]$d.Problem)
+            } else {
+                $code = if ($d.Problem -eq 'CM_PROB_PHANTOM') { 45 } else { 0 }
+            }
+        } elseif ($statusStr -ne 'OK') {
             try {
                 $prop = Get-PnpDeviceProperty -InstanceId $d.InstanceId -KeyName 'DEVPKEY_Device_ProblemCode' -ErrorAction SilentlyContinue
                 if ($prop -and $null -ne $prop.Data) { $code = [int]$prop.Data }
@@ -375,6 +383,19 @@ function Get-BTFixBatteryStatus {
             continue
         }
 
+        # Offline/standby devices cannot have active GATT battery telemetry
+        if (-not $p.IsConnected) {
+            $results += [pscustomobject]@{
+                FriendlyName   = $p.FriendlyName
+                InstanceId     = $p.InstanceId
+                IsConnected    = $false
+                BatteryPercent = $null
+                Gauge          = "Standby (Not connected)"
+                HasBatteryInfo = $false
+            }
+            continue
+        }
+
         $batteryPercent = $null
         try {
             $prop = Get-PnpDeviceProperty -InstanceId $p.InstanceId -KeyName $batteryKey -ErrorAction SilentlyContinue
@@ -386,7 +407,7 @@ function Get-BTFixBatteryStatus {
         }
 
         # If not directly on the root instance, query child PnP instances under Bluetooth class
-        if ($null -eq $batteryPercent -and $p.IsConnected) {
+        if ($null -eq $batteryPercent) {
             try {
                 if ($p.InstanceId -match '([0-9a-fA-F]{12})') {
                     $mac = $matches[1]
@@ -628,6 +649,10 @@ function Optimize-BTFixControllerLatency {
     }
 
     $radios = @(Get-BTFixRadio | Where-Object { -not $_.IsInternal })
+    if ($radios.Count -eq 0) {
+        # Fallback to active USB radios even if internal (e.g. laptop Intel/Realtek internal USB Bluetooth modules)
+        $radios = @(Get-BTFixRadio | Where-Object { $_.InstanceId -like 'USB\*' -and $_.IsHealthy })
+    }
     $optimized = @()
 
     foreach ($r in $radios) {

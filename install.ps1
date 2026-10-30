@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     One-Line Web Installer & Runner for Bluetooth Dongle Fix (BTFix)
 .DESCRIPTION

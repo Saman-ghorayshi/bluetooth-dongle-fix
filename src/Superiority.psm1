@@ -1,4 +1,4 @@
-# Superiority Evaluation Engine: Automatically detects and ranks multiple Bluetooth
+﻿# Superiority Evaluation Engine: Automatically detects and ranks multiple Bluetooth
 # radios on Windows to identify the superior hardware based on Bluetooth specification (LMP),
 # antenna placement, and hardware reliability.
 
@@ -45,7 +45,10 @@ Queries detailed Bluetooth radio hardware specifications from PnP properties.
 function Get-BTFixRadioSpec {
     [CmdletBinding()]
     [OutputType([object])]
-    param([Parameter(Mandatory)][string]$InstanceId)
+    param(
+        [Parameter(Mandatory)][string]$InstanceId,
+        [hashtable]$Properties
+    )
 
     $lmp = $null
     $hci = $null
@@ -53,19 +56,34 @@ function Get-BTFixRadioSpec {
     $hciSub = $null
 
     try {
-        $props = Get-PnpDeviceProperty -InstanceId $InstanceId -ErrorAction SilentlyContinue
-        if ($props) {
-            $lmpProp = $props | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioLmpVersion' -or $_.Key -like '*{A92F26CA-EDA7-4B1D-9DB2-27B68AA5A2EB} 4*' } | Select-Object -First 1
-            if ($lmpProp -and $null -ne $lmpProp.Data) { $lmp = [int]$lmpProp.Data }
+        if ($Properties) {
+            if ($Properties.ContainsKey('DEVPKEY_Bluetooth_RadioLmpVersion') -and $null -ne $Properties['DEVPKEY_Bluetooth_RadioLmpVersion']) {
+                $lmp = [int]$Properties['DEVPKEY_Bluetooth_RadioLmpVersion']
+            }
+            if ($Properties.ContainsKey('DEVPKEY_Bluetooth_RadioHciVersion') -and $null -ne $Properties['DEVPKEY_Bluetooth_RadioHciVersion']) {
+                $hci = [int]$Properties['DEVPKEY_Bluetooth_RadioHciVersion']
+            }
+            if ($Properties.ContainsKey('DEVPKEY_Bluetooth_RadioLmpSubversion') -and $null -ne $Properties['DEVPKEY_Bluetooth_RadioLmpSubversion']) {
+                $lmpSub = [int]$Properties['DEVPKEY_Bluetooth_RadioLmpSubversion']
+            }
+            if ($Properties.ContainsKey('DEVPKEY_Bluetooth_RadioHciRevision') -and $null -ne $Properties['DEVPKEY_Bluetooth_RadioHciRevision']) {
+                $hciSub = [int]$Properties['DEVPKEY_Bluetooth_RadioHciRevision']
+            }
+        } else {
+            $props = Get-PnpDeviceProperty -InstanceId $InstanceId -ErrorAction SilentlyContinue
+            if ($props) {
+                $lmpProp = $props | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioLmpVersion' -or $_.Key -like '*{A92F26CA-EDA7-4B1D-9DB2-27B68AA5A2EB} 4*' } | Select-Object -First 1
+                if ($lmpProp -and $null -ne $lmpProp.Data) { $lmp = [int]$lmpProp.Data }
 
-            $hciProp = $props | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioHciVersion' -or $_.Key -like '*{A92F26CA-EDA7-4B1D-9DB2-27B68AA5A2EB} 6*' } | Select-Object -First 1
-            if ($hciProp -and $null -ne $hciProp.Data) { $hci = [int]$hciProp.Data }
+                $hciProp = $props | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioHciVersion' -or $_.Key -like '*{A92F26CA-EDA7-4B1D-9DB2-27B68AA5A2EB} 6*' } | Select-Object -First 1
+                if ($hciProp -and $null -ne $hciProp.Data) { $hci = [int]$hciProp.Data }
 
-            $lmpSubProp = $props | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioLmpSubversion' -or $_.Key -like '*{A92F26CA-EDA7-4B1D-9DB2-27B68AA5A2EB} 5*' } | Select-Object -First 1
-            if ($lmpSubProp -and $null -ne $lmpSubProp.Data) { $lmpSub = [int]$lmpSubProp.Data }
+                $lmpSubProp = $props | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioLmpSubversion' -or $_.Key -like '*{A92F26CA-EDA7-4B1D-9DB2-27B68AA5A2EB} 5*' } | Select-Object -First 1
+                if ($lmpSubProp -and $null -ne $lmpSubProp.Data) { $lmpSub = [int]$lmpSubProp.Data }
 
-            $hciSubProp = $props | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioHciRevision' -or $_.Key -like '*{A92F26CA-EDA7-4B1D-9DB2-27B68AA5A2EB} 7*' } | Select-Object -First 1
-            if ($hciSubProp -and $null -ne $hciSubProp.Data) { $hciSub = [int]$hciSubProp.Data }
+                $hciSubProp = $props | Where-Object { $_.KeyName -eq 'DEVPKEY_Bluetooth_RadioHciRevision' -or $_.Key -like '*{A92F26CA-EDA7-4B1D-9DB2-27B68AA5A2EB} 7*' } | Select-Object -First 1
+                if ($hciSubProp -and $null -ne $hciSubProp.Data) { $hciSub = [int]$hciSubProp.Data }
+            }
         }
     } catch {
         Write-Verbose "Could not query Bluetooth PnP properties for $InstanceId"
@@ -213,7 +231,8 @@ function Get-BTFixSuperiorRadio {
 
     if ($Radios.Count -eq 0) { return $null }
     if ($Radios.Count -eq 1) {
-        $specs = Get-BTFixRadioSpec -InstanceId $Radios[0].InstanceId
+        $p0 = if ($Radios[0].PSObject.Properties['AllProperties']) { $Radios[0].AllProperties } else { $null }
+        $specs = Get-BTFixRadioSpec -InstanceId $Radios[0].InstanceId -Properties $p0
         $eval = Get-BTFixRadioScore -Radio $Radios[0] -Specs $specs
         return [pscustomobject]@{
             SuperiorRadio = $Radios[0]
@@ -224,7 +243,8 @@ function Get-BTFixSuperiorRadio {
 
     $scored = @()
     foreach ($r in $Radios) {
-        $specs = Get-BTFixRadioSpec -InstanceId $r.InstanceId
+        $pr = if ($r.PSObject.Properties['AllProperties']) { $r.AllProperties } else { $null }
+        $specs = Get-BTFixRadioSpec -InstanceId $r.InstanceId -Properties $pr
         $eval = Get-BTFixRadioScore -Radio $r -Specs $specs
         $scored += $eval
     }

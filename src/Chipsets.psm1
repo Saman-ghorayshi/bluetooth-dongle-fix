@@ -1,4 +1,4 @@
-# Known Bluetooth chipset families and where to get a working driver.
+﻿# Known Bluetooth chipset families and where to get a working driver.
 #
 # Windows ships a generic Bluetooth driver (bth.inf) that covers most chipsets.
 # When a radio is broken *and* the generic driver cannot start it, the chipset

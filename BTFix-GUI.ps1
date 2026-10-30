@@ -43,8 +43,12 @@ if (-not $integrity.Ok) {
         ($integrity.Mismatches | ForEach-Object { "  modified: $_" } | Out-String) +
         ($integrity.Missing | ForEach-Object { "  missing: $_" } | Out-String) +
         "`nBTFix refuses to start. Reinstall it, and scan the machine for malware."
-    [System.Windows.MessageBox]::Show($detail, 'BTFix - Integrity Check Failed',
-        [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Stop) | Out-Null
+    if (-not $SelfTest) {
+        [System.Windows.MessageBox]::Show($detail, 'BTFix - Integrity Check Failed',
+            [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Stop) | Out-Null
+    } else {
+        Write-Error $detail
+    }
     exit 3
 }
 if ($integrity.BaselineSource -eq 'none' -and (Test-BTFixAdministrator)) {
@@ -353,7 +357,8 @@ function Show-HardwareState {
     $panelRadios.Children.Clear()
     $panelPeripherals.Children.Clear()
 
-    $radios = @(Get-BTFixRadio)
+    $script:LastScannedRadios = @(Get-BTFixRadio)
+    $radios = $script:LastScannedRadios
     $txtRadioCount.Text = "$($radios.Count) detected"
     Write-GuiLog 'INFO' "Discovered $($radios.Count) Bluetooth host radio(s)."
 
@@ -441,7 +446,8 @@ function Show-HardwareState {
         $tbLmp = New-Object System.Windows.Controls.TextBlock
         $tbLmp.FontSize = 11
         $tbLmp.Foreground = $brushConv.ConvertFromString('#BC8CFF')
-        $spec = Get-BTFixRadioSpec -InstanceId $r.InstanceId
+        $propMap = if ($r.PSObject.Properties['AllProperties']) { $r.AllProperties } else { $null }
+        $spec = Get-BTFixRadioSpec -InstanceId $r.InstanceId -Properties $propMap
         if ($null -ne $spec.LmpVersion) {
             $tbLmp.Text = "$($spec.BluetoothVersion) (LMP $($spec.LmpVersion))"
         } else {
@@ -511,7 +517,8 @@ function Show-HardwareState {
 
     # Peripherals & Battery Levels
     Write-GuiLog 'INFO' 'Enumerating paired Bluetooth audio endpoints & battery telemetry...'
-    $peripherals = @(Get-BTFixBatteryStatus)
+    $script:LastScannedPeripherals = @(Get-BTFixBatteryStatus)
+    $peripherals = $script:LastScannedPeripherals
     $txtPeripheralCount.Text = "$($peripherals.Count) found"
     if ($peripherals.Count -eq 0) {
         $tbNone = New-Object System.Windows.Controls.TextBlock
@@ -841,8 +848,10 @@ Show-HardwareState
 
 if ($SelfTest) {
     try {
+        $rCount = if ($script:LastScannedRadios) { $script:LastScannedRadios.Count } else { 0 }
+        $pCount = if ($script:LastScannedPeripherals) { $script:LastScannedPeripherals.Count } else { 0 }
         Write-Host ("SELFTEST OK radios={0} peripherals={1} loglines={2}" -f
-            @(Get-BTFixRadio).Count, @(Get-BTFixPairedDevice).Count, $txtConsole.Document.Blocks.Count)
+            $rCount, $pCount, $txtConsole.Document.Blocks.Count)
         $window.Close()
         exit 0
     } catch {

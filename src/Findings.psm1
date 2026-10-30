@@ -1,4 +1,4 @@
-# The checklist engine: it combines the radio inventory, the Microsoft problem
+﻿# The checklist engine: it combines the radio inventory, the Microsoft problem
 # code table, the service state, the software radio switch, the paired
 # peripherals and the USB power settings into a prioritized list of findings.
 #

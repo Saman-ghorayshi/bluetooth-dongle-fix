@@ -35,6 +35,25 @@ $script:ProblemCodes = @(
     [pscustomobject]@{ Code = 56; Name = 'CM_PROB_NEED_CLASS_CONFIG';     Severity = 'Medium'; Bluetooth = $true;  Summary = 'The device class is not configured.'; Fix = 'Reinstall the driver.' }
 )
 
+$script:ProblemCodesByName = @{}
+foreach ($row in $script:ProblemCodes) {
+    $script:ProblemCodesByName[$row.Name] = [int]$row.Code
+}
+
+<#
+.SYNOPSIS
+Returns the numeric problem code for a CM_PROB_* name, or 0 when unknown.
+#>
+function Get-BTFixProblemCodeByName {
+    [CmdletBinding()]
+    [OutputType([int])]
+    param([Parameter(Mandatory)][string]$Name)
+    if ($script:ProblemCodesByName.ContainsKey($Name)) {
+        return $script:ProblemCodesByName[$Name]
+    }
+    return 0
+}
+
 <#
 .SYNOPSIS
 Returns the problem code row for a numeric code, or $null when unknown.
@@ -57,4 +76,4 @@ function Get-BTFixProblemCodeTable {
     return $script:ProblemCodes
 }
 
-Export-ModuleMember -Function @('Get-BTFixProblemCode', 'Get-BTFixProblemCodeTable')
+Export-ModuleMember -Function @('Get-BTFixProblemCode', 'Get-BTFixProblemCodeByName', 'Get-BTFixProblemCodeTable')
