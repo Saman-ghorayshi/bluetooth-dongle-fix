@@ -1,7 +1,7 @@
 # 🎧 Bluetooth Dongle Fix (BTFix)
 
 <p align="center">
-  <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/actions"><img src="https://img.shields.io/badge/tests-63%2F63%20passing-brightgreen?style=flat-square&logo=github-actions" alt="Tests Status"></a>
+  <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/actions"><img src="https://img.shields.io/badge/tests-70%2F70%20passing-brightgreen?style=flat-square&logo=github-actions" alt="Tests Status"></a>
   <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License MIT"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?style=flat-square&logo=windows" alt="Platform Windows">
   <img src="https://img.shields.io/badge/powershell-5.1%20%7C%207%2B-5391FE?style=flat-square&logo=powershell" alt="PowerShell">
@@ -11,17 +11,29 @@
 
 <p align="center">
   <b>Diagnose, benchmark, and repair USB Bluetooth adapters that Windows refuses to start</b><br>
-  Resolves the classic <b>Code 31 (CM_PROB_FAILED_ADD)</b> conflict, isolates weak motherboard radios, scores hardware with the <b>Superiority Engine</b>, and restores stutter-free wireless audio to your earbuds.
+  Resolves the classic <b>Code 31 (CM_PROB_FAILED_ADD)</b> conflict, isolates weak motherboard radios, scores hardware with the <b>Superiority Engine</b>, enforces <b>Hi-Fi Stereo (Anti-HandsFree)</b>, and monitors real-time <b>GATT/BLE battery percentages</b>.
 </p>
 
 ---
 
-## ⚡ 1-Second Quick Start (No Git or Download Needed)
+## ⚡ 1-Second Quick Start
 
+### Option A: One-Line Web Installer (Recommended)
 Open **PowerShell** and paste this single command:
 
 ```powershell
 irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/main/install.ps1 | iex
+```
+
+### Option B: Windows Package Manager (winget)
+```cmd
+winget install BTFix.BTFix
+```
+
+### Option C: Scoop Package Manager
+```powershell
+scoop bucket add btfix https://github.com/Saman-ghorayshi/bluetooth-dongle-fix
+scoop install btfix
 ```
 
 > **What this does:**
@@ -63,6 +75,33 @@ BTFix includes a native Fluent dark-mode graphical user interface built on Windo
 * Launch via Desktop Shortcut or run `BTFix-GUI.bat`.
 * Or launch from PowerShell: `.\BTFix-GUI.ps1`.
 * Interactive text menu launcher: `BTFix.bat`.
+
+---
+
+## ⚡ Viral Features: Hi-Fi Audio, Battery & Low-Latency Gaming
+
+### 1. 🛡️ Anti-HandsFree Telephony Hi-Fi Enforcer (`-Mode HandsFree`)
+* **The Problem**: Whenever voice communication apps (Discord, Zoom, Microsoft Teams, Slack, game voice chat) start, Windows abruptly downgrades Bluetooth audio from crystal-clear 44.1/48kHz Stereo down to robotic 8kHz/16kHz Mono.
+* **The Cause**: Windows pairs both an A2DP Stereo playback sink and a Hands-Free (HFP/HSP) telephony gateway. Opening a mic recording endpoint forces the headset into low-bitrate HFP telephony mode.
+* **The Fix**: BTFix isolates and disables the virtual Hands-Free telephony node. Your headphones permanently stay locked in pristine A2DP Hi-Fi Stereo while Windows routes microphone input through your laptop mic or external USB mic.
+* **CLI**: `.\BTFix.ps1 -Mode HandsFree -State Disable` (or click **"Anti-HandsFree Hi-Fi"** in the GUI).
+* **Rollback**: `.\BTFix.ps1 -Mode HandsFree -State Enable` restores telephony anytime.
+
+### 2. 🔋 Bluetooth LE & Audio Battery Percentage Inspector (`-Mode Battery`)
+* **The Problem**: Windows Settings frequently fails to display or update battery percentages for AirPods, Galaxy Buds, Sony WH-1000XM, and wireless game controllers.
+* **The Fix**: Directly queries the Windows Unified Device Property Store for `DEVPKEY_Device_BatteryPercentage` (`{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2`) across all paired Bluetooth Classic & LE GATT interfaces.
+* **Visual Telemetry**: Displays terminal battery bar gauges `[████████░░] 80%` and real-time color-coded badges in the GUI.
+* **CLI**: `.\BTFix.ps1 -Mode Battery`
+
+### 3. 🎵 High-Bitrate A2DP Codec Optimizer (`-Mode Codec`)
+* Unlocks Windows 10/11 native AAC and aptX codecs and disables erratic AVRCP Absolute Volume synchronization.
+* **CLI**: `.\BTFix.ps1 -Mode Codec -State Enable`
+
+### 4. 🎮 Esports Low-Latency Controller Mode (`-Mode GameMode`)
+* **The Problem**: PS5 DualSense, Xbox Wireless, and Switch Pro controllers experience sudden 50–150ms input lag spikes during gameplay.
+* **The Cause**: Windows USB Hub Selective Suspend powers down Bluetooth host controllers into low-power D2 states during brief input intervals.
+* **The Fix**: Automatically detects connected gaming controllers, disables USB Selective Suspend across host radios, and enforces continuous polling.
+* **CLI**: `.\BTFix.ps1 -Mode GameMode -State Enable`
 
 ---
 
@@ -167,14 +206,29 @@ BTFix offers a full-featured CLI for power users, sysadmins, and automation scri
 
 # 8. Export markdown & JSON diagnostics bundle
 .\BTFix.ps1 -Mode Report
+
+# 9. Disable Hands-Free telephony mic trap (permanent Hi-Fi Stereo)
+.\BTFix.ps1 -Mode HandsFree -State Disable
+
+# 10. Check real-time battery percentages for all peripherals
+.\BTFix.ps1 -Mode Battery
+
+# 11. Optimize A2DP codecs (unlock AAC and aptX)
+.\BTFix.ps1 -Mode Codec -State Enable
+
+# 12. Enable low-latency esports mode for game controllers
+.\BTFix.ps1 -Mode GameMode -State Enable
 ```
 
 ### CLI Parameters
 
 | Option | Type | Description |
 | :--- | :--- | :--- |
-| `-Mode` | String | `Check` (default), `Compare`, `Fix`, `Rollback`, `Forget`, `Chipsets`, `Report` |
+| `-Mode` | String | `Check` (default), `Compare`, `Fix`, `Rollback`, `Forget`, `Chipsets`, `Report`, `HandsFree`, `Battery`, `Codec`, `GameMode` |
+| `-State` | String | `Status` (default), `Enable`, `Disable`, `Off`, `On` (for HandsFree, Codec, GameMode) |
 | `-Radio <id>` | String | Explicitly select target radio by PnP Instance ID |
+| `-Device <name>` | String | Filter paired peripheral or telephony endpoint by name |
+| `-ToggleService` | Switch | Also stop/disable `BTAGService` when disabling HandsFree telephony |
 | `-PreferInternal` | Switch | Prioritizes built-in motherboard adapter instead of external dongle |
 | `-DisableUsbSuspend`| Switch | Disables Windows USB Selective Suspend to prevent dongle sleep drops |
 | `-ForgetStale` | Switch | Forgets paired peripherals that are not currently connected |
@@ -216,8 +270,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
 == radio targeting            [1 PASS]
 == integrity                  [4 PASS]
 == repair pipeline (mocked)   [5 PASS]
+== handsfree hi-fi enforcer   [2 PASS]
+== battery telemetry          [1 PASS]
+== audio codec optimizer      [2 PASS]
+== gaming controller latency  [2 PASS]
 ------------------------------------------------------------
-passed: 63   failed: 0
+passed: 70   failed: 0
 ```
 
 ---

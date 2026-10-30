@@ -1,0 +1,29 @@
+# Created using wingetcreate 1.6.0.0
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.locale.1.6.0.schema.json
+
+PackageIdentifier: BTFix.BTFix
+PackageVersion: 1.2.0
+PackageLocale: en-US
+Publisher: Saman Ghorayshi
+PublisherUrl: https://github.com/Saman-ghorayshi
+PublisherSupportUrl: https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/issues
+PackageName: Bluetooth Dongle Fix (BTFix)
+PackageUrl: https://github.com/Saman-ghorayshi/bluetooth-dongle-fix
+License: MIT
+LicenseUrl: https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/blob/main/LICENSE
+ShortDescription: Zero-dependency Windows tool for diagnosing and repairing USB Bluetooth dongles (Code 31), anti-handsfree hi-fi enforcer, and BLE battery inspector.
+Description: |
+  BTFix fixes USB Bluetooth dongles Windows refuses to start (Code 31 / CM_PROB_FAILED_ADD),
+  resolves 8kHz Hands-Free voice traps in Discord/Zoom, monitors real-time peripheral battery
+  levels, optimizes A2DP audio codecs, and activates esports low-latency controller mode.
+Moniker: btfix
+Tags:
+  - bluetooth
+  - driver
+  - code31
+  - audio
+  - battery
+  - dongle
+  - repair
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

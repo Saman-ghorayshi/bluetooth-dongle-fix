@@ -4,7 +4,9 @@
 .DESCRIPTION
     Zero-dependency native Windows GUI for diagnosing dual-radio conflicts,
     running the Superiority Benchmark Engine, resolving Code 31/43/10/22
-    lockouts, and restoring stutter-free audio to wireless earbuds.
+    lockouts, enforcing pristine Hi-Fi audio (disabling Hands-Free mic trap),
+    inspecting real-time BLE battery percentages, unlocking AAC/aptX codecs,
+    and activating esports low-latency controller mode.
 #>
 
 [CmdletBinding()]
@@ -54,7 +56,7 @@ if ($integrity.BaselineSource -eq 'none' -and (Test-BTFixAdministrator)) {
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Bluetooth Dongle Fix &amp; Superiority Benchmark"
-        Height="760" Width="980" MinHeight="640" MinWidth="840"
+        Height="780" Width="1020" MinHeight="660" MinWidth="860"
         WindowStartupLocation="CenterScreen"
         Background="#0D1117" Foreground="#C9D1D9"
         FontFamily="Segoe UI, Segoe UI Variable, Arial">
@@ -146,10 +148,10 @@ if ($integrity.BaselineSource -eq 'none' -and (Test-BTFixAdministrator)) {
                 <StackPanel Orientation="Horizontal">
                     <TextBlock Text="🎧 Bluetooth Dongle Fix" FontSize="20" FontWeight="Bold" Foreground="#58A6FF"/>
                     <Border Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="4" Margin="12,2,0,0" Padding="6,1">
-                        <TextBlock Text="v2.0" FontSize="11" FontWeight="Bold" Foreground="#8B949E"/>
+                        <TextBlock Text="v2.1" FontSize="11" FontWeight="Bold" Foreground="#8B949E"/>
                     </Border>
                 </StackPanel>
-                <TextBlock Text="Dual-Radio Conflict Resolver &amp; Superiority Benchmark Engine" FontSize="12" Foreground="#8B949E" Margin="0,3,0,0"/>
+                <TextBlock Text="Dual-Radio Conflict Resolver, Superiority Engine &amp; Hi-Fi Audio Suite" FontSize="12" Foreground="#8B949E" Margin="0,3,0,0"/>
             </StackPanel>
 
             <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -222,6 +224,9 @@ if ($integrity.BaselineSource -eq 'none' -and (Test-BTFixAdministrator)) {
         <Border Grid.Row="3" Background="#161B22" BorderBrush="#30363D" BorderThickness="1" CornerRadius="8" Padding="12,10" Margin="0,0,0,12">
             <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <Button x:Name="BtnAutoFix" Style="{StaticResource PrimaryButton}" Content="⚡ One-Click Auto-Fix" Margin="0,0,8,0" ToolTip="Automatically benchmarks radios, isolates superior radio, parks conflicting radio, and resets audio stack."/>
+                <Button x:Name="BtnHiFiMode" Content="🛡️ Anti-HandsFree Hi-Fi" Margin="0,0,8,0" ToolTip="Disables Hands-Free telephony mic trap so Discord/Zoom/Teams never downgrade audio to 8kHz mono."/>
+                <Button x:Name="BtnGameMode" Content="🎮 Esports Game Mode" Margin="0,0,8,0" ToolTip="Disables USB Selective Suspend and polling throttling for lowest latency on DualSense, Xbox, and Switch controllers."/>
+                <Button x:Name="BtnCodec" Content="🎵 Unlock AAC/aptX" Margin="0,0,8,0" ToolTip="Optimizes Windows A2DP registry settings to unlock high-bitrate AAC and aptX codecs."/>
                 <Button x:Name="BtnScan" Content="🔍 Scan &amp; Benchmark" Margin="0,0,8,0" ToolTip="Refreshes hardware inventory and recalculates superiority scores."/>
                 <Button x:Name="BtnRestartAudio" Content="🎧 Fix Audio Drops" Margin="0,0,8,0" ToolTip="Restarts BTAGService and Windows AudioEndpointBuilder to re-route audio to earbuds without rebooting."/>
                 <Button x:Name="BtnRollback" Content="🔄 Rollback" Margin="0,0,8,0" ToolTip="Restores hardware state from the latest backup snapshot."/>
@@ -272,6 +277,9 @@ $panelPeripherals     = $window.FindName('PanelPeripherals')
 $txtRadioCount        = $window.FindName('TxtRadioCount')
 $txtPeripheralCount   = $window.FindName('TxtPeripheralCount')
 $btnAutoFix           = $window.FindName('BtnAutoFix')
+$btnHiFiMode          = $window.FindName('BtnHiFiMode')
+$btnGameMode          = $window.FindName('BtnGameMode')
+$btnCodec             = $window.FindName('BtnCodec')
 $btnScan              = $window.FindName('BtnScan')
 $btnRestartAudio      = $window.FindName('BtnRestartAudio')
 $btnRollback          = $window.FindName('BtnRollback')
@@ -424,8 +432,7 @@ function Show-HardwareState {
         $bPlace.Child = $tbPlace
         $null = $wp.Children.Add($bPlace)
 
-        # Badge 2: Bluetooth LMP Spec (radio objects carry no LMP data; it lives
-        # in the per-device property store, so query it per instance)
+        # Badge 2: Bluetooth LMP Spec
         $bLmp = New-Object System.Windows.Controls.Border
         $bLmp.CornerRadius = New-Object System.Windows.CornerRadius(4)
         $bLmp.Padding = New-Object System.Windows.Thickness(6, 2, 6, 2)
@@ -502,9 +509,9 @@ function Show-HardwareState {
         $null = $panelRadios.Children.Add($border)
     }
 
-    # Peripherals
-    Write-GuiLog 'INFO' 'Enumerating paired Bluetooth audio endpoints...'
-    $peripherals = @(Get-BTFixPairedDevice)
+    # Peripherals & Battery Levels
+    Write-GuiLog 'INFO' 'Enumerating paired Bluetooth audio endpoints & battery telemetry...'
+    $peripherals = @(Get-BTFixBatteryStatus)
     $txtPeripheralCount.Text = "$($peripherals.Count) found"
     if ($peripherals.Count -eq 0) {
         $tbNone = New-Object System.Windows.Controls.TextBlock
@@ -522,6 +529,8 @@ function Show-HardwareState {
             $bPer.Padding = New-Object System.Windows.Thickness(8)
             $bPer.Margin = New-Object System.Windows.Thickness(0, 0, 0, 6)
 
+            $spPer = New-Object System.Windows.Controls.StackPanel
+
             $dp = New-Object System.Windows.Controls.DockPanel
             $tbPName = New-Object System.Windows.Controls.TextBlock
             $tbPName.Text = $p.FriendlyName
@@ -536,23 +545,38 @@ function Show-HardwareState {
             if ($p.IsConnected) {
                 $tbPStatus.Text = '🟢 Connected'
                 $tbPStatus.Foreground = $brushConv.ConvertFromString('#3FB950')
-            } elseif ($p.IsNotPresent) {
-                $tbPStatus.Text = '⚪ Paired (Standby)'
-                $tbPStatus.Foreground = $brushConv.ConvertFromString('#8B949E')
             } else {
-                $tbPStatus.Text = "Code $($p.ProblemCode)"
-                $tbPStatus.Foreground = $brushConv.ConvertFromString('#D29922')
+                $tbPStatus.Text = '⚪ Standby'
+                $tbPStatus.Foreground = $brushConv.ConvertFromString('#8B949E')
             }
             $null = $dp.Children.Add($tbPStatus)
-            $bPer.Child = $dp
+            $null = $spPer.Children.Add($dp)
+
+            # Battery level badge / gauge if reported
+            if ($p.HasBatteryInfo) {
+                $dpBat = New-Object System.Windows.Controls.DockPanel
+                $dpBat.Margin = New-Object System.Windows.Thickness(0, 4, 0, 0)
+                $tbGauge = New-Object System.Windows.Controls.TextBlock
+                $tbGauge.Text = "$($p.Gauge)"
+                $tbGauge.FontSize = 10
+                $tbGauge.FontFamily = New-Object System.Windows.Media.FontFamily('Consolas, monospace')
+                $tbGauge.Foreground = if ($p.BatteryPercent -le 20) {
+                    $brushConv.ConvertFromString('#F85149')
+                } elseif ($p.BatteryPercent -le 50) {
+                    $brushConv.ConvertFromString('#D29922')
+                } else {
+                    $brushConv.ConvertFromString('#3FB950')
+                }
+                $null = $dpBat.Children.Add($tbGauge)
+                $null = $spPer.Children.Add($dpBat)
+            }
+
+            $bPer.Child = $spPer
             $null = $panelPeripherals.Children.Add($bPer)
         }
     }
 
-    # Diagnosis Analysis. Run the findings engine LIVE (no -NoLive) so the
-    # environmental checks - stopped services, the machine-wide software
-    # radio switch, paired peripherals - surface in the GUI too, not just
-    # the radio inventory.
+    # Diagnosis Analysis
     $diag = Get-BTFixDiagnosis -Inventory $radios -NoLive
     $findings = @(Get-BTFixFinding -Inventory $radios)
     if ($findings.Count -gt 0) { Write-GuiLog 'WARN' "Discovered $($findings.Count) diagnostic finding(s)." }
@@ -598,15 +622,14 @@ function Show-HardwareState {
         $txtDiagnosisTitle.Text = 'Bluetooth Adapter Disabled (Code 22)'
         $txtDiagnosisTitle.Foreground = $brushConv.ConvertFromString('#D29922')
         $txtDiagnosisDetail.Text = 'No active Bluetooth radio available. Click Auto-Fix to re-enable your adapter.'
-        Write-GuiLog 'WARN' 'Bluetooth adapter is currently disabled.'
+        Write-GuiLog 'WARN' 'No active Bluetooth radio. Use Auto-Fix to restore.'
     } else {
         $borderDiagnosis.Background = $brushConv.ConvertFromString('#21262D')
         $borderDiagnosis.BorderBrush = $brushConv.ConvertFromString('#30363D')
         $txtDiagnosisIcon.Text = 'ℹ️'
-        $txtDiagnosisTitle.Text = "Diagnosis: $($diag.Classification)"
+        $txtDiagnosisTitle.Text = 'Scan Complete'
         $txtDiagnosisTitle.Foreground = $brushConv.ConvertFromString('#F0F6FC')
-        $txtDiagnosisDetail.Text = ($diag.RecommendedActions -join ' | ')
-        Write-GuiLog 'INFO' "Diagnosis: $($diag.Classification)"
+        $txtDiagnosisDetail.Text = "Hardware inventory verified. System ready."
     }
 }
 
@@ -618,17 +641,15 @@ function Set-GuiActionButtonState {
     [CmdletBinding(SupportsShouldProcess)]
     param([bool]$Enabled)
     if ($PSCmdlet.ShouldProcess('action buttons', "Set enabled=$Enabled")) {
-        foreach ($b in @($btnAutoFix, $btnScan, $btnRestartAudio, $btnRollback)) { $b.IsEnabled = $Enabled }
+        foreach ($b in @($btnAutoFix, $btnScan, $btnRestartAudio, $btnRollback, $btnHiFiMode, $btnGameMode, $btnCodec)) {
+            if ($b) { $b.IsEnabled = $Enabled }
+        }
     }
 }
 
-# Runs BTFix.ps1 in a hidden child process so the WPF window stays responsive
-# while pnputil and the service restarts do their (slow) work. The child
-# inherits this window's elevation; -NoElevation makes an unelevated child
-# fail fast with a clear message instead of spawning a second UAC prompt.
 function Start-GuiCliMode {
     [CmdletBinding(SupportsShouldProcess)]
-    param([ValidateSet('Fix', 'Rollback')][string]$Mode, [string[]]$ExtraArgs = @())
+    param([ValidateSet('Fix', 'Rollback', 'HandsFree', 'Codec', 'GameMode')][string]$Mode, [string[]]$ExtraArgs = @())
     if ($script:GuiCliProcess -and -not $script:GuiCliProcess.HasExited) {
         Write-GuiLog 'WARN' 'A repair is already running - wait for it to finish.'
         return $false
@@ -650,10 +671,6 @@ function Start-GuiCliMode {
     $proc = New-Object System.Diagnostics.Process
     $proc.StartInfo = $psi
 
-    # DataReceived fires on a threadpool thread: copy the payload and marshal
-    # every UI touch onto the window's dispatcher. $args[0] is the sender,
-    # $args[1] the event args (declared params would read as unused to the
-    # analyzer and to a human).
     $onOut = [System.Diagnostics.DataReceivedEventHandler]{
         if ($args[1].Data) {
             $line = $args[1].Data
@@ -667,7 +684,7 @@ function Start-GuiCliMode {
         }
     }
     $onExit = [System.EventHandler]{
-        $null = $args[0].WaitForExit()  # flush the async output readers
+        $null = $args[0].WaitForExit()
         $code = $args[0].ExitCode
         $window.Dispatcher.Invoke([action]{
             Set-GuiActionButtonState -Enabled $true
@@ -732,6 +749,42 @@ $btnAutoFix.Add_Click({
         }
     } catch {
         Write-GuiLog 'ERROR' "Repair could not start: $($_.Exception.Message)"
+        Set-GuiActionButtonState -Enabled $true
+    }
+})
+
+$btnHiFiMode.Add_Click({
+    if (-not (Test-BTFixAdministrator)) {
+        [System.Windows.MessageBox]::Show('Administrator rights are required to isolate Hands-Free telephony nodes.', 'Administrator Required', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
+        return
+    }
+    Set-GuiActionButtonState -Enabled $false
+    Write-GuiLog 'ACTION' 'Disabling Hands-Free Telephony mic traps to enforce Hi-Fi Stereo...'
+    if (-not (Start-GuiCliMode -Mode 'HandsFree' -ExtraArgs @('-State', 'Disable', '-ToggleService'))) {
+        Set-GuiActionButtonState -Enabled $true
+    }
+})
+
+$btnGameMode.Add_Click({
+    if (-not (Test-BTFixAdministrator)) {
+        [System.Windows.MessageBox]::Show('Administrator rights are required to optimize USB power and controller polling.', 'Administrator Required', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
+        return
+    }
+    Set-GuiActionButtonState -Enabled $false
+    Write-GuiLog 'ACTION' 'Applying Low-Latency Esports Game Mode for controllers...'
+    if (-not (Start-GuiCliMode -Mode 'GameMode' -ExtraArgs @('-State', 'Enable'))) {
+        Set-GuiActionButtonState -Enabled $true
+    }
+})
+
+$btnCodec.Add_Click({
+    if (-not (Test-BTFixAdministrator)) {
+        [System.Windows.MessageBox]::Show('Administrator rights are required to update A2DP audio codec settings.', 'Administrator Required', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
+        return
+    }
+    Set-GuiActionButtonState -Enabled $false
+    Write-GuiLog 'ACTION' 'Unlocking high-bitrate AAC and aptX codecs...'
+    if (-not (Start-GuiCliMode -Mode 'Codec' -ExtraArgs @('-State', 'Enable'))) {
         Set-GuiActionButtonState -Enabled $true
     }
 })

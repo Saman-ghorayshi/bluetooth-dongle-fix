@@ -676,12 +676,18 @@
 
         <!-- Command Box -->
         <div class="command-box">
-          <div class="command-text">
+          <div class="command-text" id="installCmdText">
             <span class="command-prompt">PS &gt;</span>irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/main/install.ps1 | iex
           </div>
           <button class="btn-copy" id="btnCopy" onclick="copyInstallCmd()">
             📋 Copy Command
           </button>
+        </div>
+
+        <div style="display: flex; gap: 8px; justify-content: center; margin-bottom: 20px;">
+          <button class="btn-chip active" id="chipPs" onclick="switchInstall('ps', this)">⚡ PowerShell One-Liner</button>
+          <button class="btn-chip" id="chipWinget" onclick="switchInstall('winget', this)">📦 winget</button>
+          <button class="btn-chip" id="chipScoop" onclick="switchInstall('scoop', this)">🍦 Scoop</button>
         </div>
 
         <p style="color: var(--text-muted); font-size: 0.85rem;">
@@ -706,9 +712,29 @@
           <p>Safely disables conflicting internal motherboard Bluetooth radios (Code 22) so high-gain external USB dongles claim the Microsoft stack (Code 0).</p>
         </div>
         <div class="feature-card">
+          <div class="feature-icon">🎙️</div>
+          <h3>Anti-HandsFree Hi-Fi Enforcer</h3>
+          <p>Disables the virtual Hands-Free telephony mic trap so Discord, Zoom, and Teams never degrade audio playback to 8kHz mono.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🔋</div>
+          <h3>Real-Time Battery Telemetry</h3>
+          <p>Reads GATT battery descriptors and DEVPKEY_Device_BatteryPercentage for AirPods, Galaxy Buds, Sony WH-1000XM, and gamepads.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎮</div>
+          <h3>Esports Low-Latency Game Mode</h3>
+          <p>Disables USB Selective Suspend and polling throttling for lowest latency on DualSense, Xbox, and Switch Pro controllers.</p>
+        </div>
+        <div class="feature-card">
           <div class="feature-icon">🏆</div>
           <h3>Superiority Benchmark Engine</h3>
           <p>Inspects hardware LMP versions (Bluetooth 4.0 to 6.0), dedicated RF clearance, and driver stability to mathematically rank your adapters out of 100.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">🎵</div>
+          <h3>High-Bitrate Codec Optimizer</h3>
+          <p>Unlocks Windows 10/11 native AAC and aptX codecs and disables problematic AVRCP Absolute Volume synchronization.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🎧</div>
@@ -724,11 +750,6 @@
           <div class="feature-icon">🔄</div>
           <h3>One-Click State Rollback</h3>
           <p>Every operation automatically snapshots your previous PnP hardware state to %LOCALAPPDATA%\BTFix\backups for instant undo.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon">🔋</div>
-          <h3>USB Power Suspend Guard</h3>
-          <p>Disables aggressive Windows USB Selective Suspend policies that cause external dongles to vanish after a few minutes of idle.</p>
         </div>
       </div>
     </section>
@@ -1155,9 +1176,29 @@
   </footer>
 
   <script>
+    let currentInstallCmd = "irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/main/install.ps1 | iex";
+
+    function switchInstall(type, elem) {
+      document.getElementById('chipPs').classList.remove('active');
+      document.getElementById('chipWinget').classList.remove('active');
+      document.getElementById('chipScoop').classList.remove('active');
+      if (elem) elem.classList.add('active');
+
+      const textEl = document.getElementById('installCmdText');
+      if (type === 'winget') {
+        currentInstallCmd = "winget install BTFix.BTFix";
+        textEl.innerHTML = '<span class="command-prompt">cmd &gt;</span>winget install BTFix.BTFix';
+      } else if (type === 'scoop') {
+        currentInstallCmd = "scoop bucket add btfix https://github.com/Saman-ghorayshi/bluetooth-dongle-fix; scoop install btfix";
+        textEl.innerHTML = '<span class="command-prompt">PS &gt;</span>scoop bucket add btfix https://github.com/Saman-ghorayshi/bluetooth-dongle-fix; scoop install btfix';
+      } else {
+        currentInstallCmd = "irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/main/install.ps1 | iex";
+        textEl.innerHTML = '<span class="command-prompt">PS &gt;</span>irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/main/install.ps1 | iex';
+      }
+    }
+
     function copyInstallCmd() {
-      const cmd = "irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/main/install.ps1 | iex";
-      navigator.clipboard.writeText(cmd).then(() => {
+      navigator.clipboard.writeText(currentInstallCmd).then(() => {
         const btn = document.getElementById("btnCopy");
         btn.textContent = "✓ Copied!";
         btn.classList.add("copied");
@@ -1266,8 +1307,8 @@
       handsfree: {
         title: "📞 Hands-Free Telephony (HFP) Profile Lock",
         desc: "When apps like Discord, Teams, or Zoom activate microphone access, Windows switches Bluetooth audio from the high-fidelity A2DP stereo sink (44.1/48kHz) to the bi-directional Hands-Free Audio Gateway (8kHz or 16kHz mono), degrading all system sound.",
-        cmd: ".\\BTFix.ps1 -Mode Fix; Restart-Service AudioEndpointBuilder",
-        note: "✓ Flushes the Windows Audio Endpoint Builder topology and resets paired peripheral service endpoints."
+        cmd: ".\\BTFix.ps1 -Mode HandsFree -State Disable",
+        note: "✓ Isolates and disables the virtual Hands-Free telephony node so headphones permanently stay in pristine A2DP Hi-Fi Stereo."
       },
       toggle: {
         title: "🔘 Bluetooth Software Radio Switch Stuck",

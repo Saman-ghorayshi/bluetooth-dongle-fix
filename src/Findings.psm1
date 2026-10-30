@@ -251,6 +251,33 @@ function Get-BTFixFinding {
         }
     }
 
+    # --- Hands-Free telephony advisory ----------------------------------
+    $hfDevices = @(Get-BTFixHandsFreeDevice | Where-Object { $_.IsEnabled })
+    if ($hfDevices.Count -gt 0) {
+        $hfNames = ($hfDevices | ForEach-Object { $_.FriendlyName } | Select-Object -Unique) -join ', '
+        $findings += [pscustomobject]@{
+            Id = 'handsfree-telephony-active'; Severity = 'Info'
+            Title = "Hands-Free telephony is enabled ($($hfDevices.Count) endpoint(s))"
+            Detail = "Active telephony nodes: $hfNames. When voice apps (Discord, Zoom, Teams) access microphones, Windows downgrades audio playback to 8kHz mono."
+            Fix = 'Preserve Hi-Fi A2DP stereo playback by isolating the Hands-Free telephony node: .\BTFix.ps1 -Mode HandsFree -State Disable'
+            AutoFixable = $true
+            Data = @{ HandsFreeDevices = $hfDevices }
+        }
+    }
+
+    # --- Low peripheral battery warning ---------------------------------
+    $batteries = @(Get-BTFixBatteryStatus | Where-Object { $_.HasBatteryInfo -and $_.IsConnected -and $_.BatteryPercent -le 20 })
+    foreach ($b in $batteries) {
+        $findings += [pscustomobject]@{
+            Id = "low-battery-$($b.InstanceId)"; Severity = 'Low'
+            Title = "Low battery on $($b.FriendlyName) ($($b.BatteryPercent)%)"
+            Detail = "Peripheral is at $($b.BatteryPercent)% battery: $($b.Gauge). Low charge causes sudden disconnects and packet dropouts."
+            Fix = "Charge $($b.FriendlyName) to prevent Bluetooth connection drops."
+            AutoFixable = $false
+            Data = @{ Battery = $b }
+        }
+    }
+
     $order = @{ High = 0; Medium = 1; Low = 2; Info = 3 }
     return @($findings | Sort-Object -Property @{ Expression = { $order[$_.Severity] } }, Title)
 }

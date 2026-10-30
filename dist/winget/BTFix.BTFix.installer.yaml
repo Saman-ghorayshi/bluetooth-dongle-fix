@@ -1,0 +1,20 @@
+# Created using wingetcreate 1.6.0.0
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
+
+PackageIdentifier: BTFix.BTFix
+PackageVersion: 1.2.0
+Platform:
+  - Windows.Desktop
+InstallModes:
+  - silent
+  - interactive
+Installers:
+  - Architecture: neutral
+    InstallerType: portable
+    InstallerUrl: https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/archive/refs/tags/v1.2.0.zip
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    Commands:
+      - btfix
+      - btfix-gui
+ManifestType: installer
+ManifestVersion: 1.6.0

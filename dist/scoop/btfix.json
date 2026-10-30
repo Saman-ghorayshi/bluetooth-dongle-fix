@@ -1,0 +1,30 @@
+{
+    "version": "1.2.0",
+    "description": "Windows Bluetooth dongle repair suite, superiority benchmark engine, anti-handsfree hi-fi enforcer, and BLE battery monitor",
+    "homepage": "https://github.com/Saman-ghorayshi/bluetooth-dongle-fix",
+    "license": "MIT",
+    "notes": "Run 'btfix' from any terminal or launch 'btfix-gui' for the graphical interface.",
+    "url": "https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/archive/refs/tags/v1.2.0.zip",
+    "extract_dir": "bluetooth-dongle-fix-1.2.0",
+    "bin": [
+        [
+            "BTFix.ps1",
+            "btfix"
+        ],
+        [
+            "BTFix-GUI.ps1",
+            "btfix-gui"
+        ]
+    ],
+    "shortcuts": [
+        [
+            "BTFix-GUI.ps1",
+            "Bluetooth Dongle Fix"
+        ]
+    ],
+    "checkver": "github",
+    "autoupdate": {
+        "url": "https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/archive/refs/tags/v$version.zip",
+        "extract_dir": "bluetooth-dongle-fix-$version"
+    }
+}

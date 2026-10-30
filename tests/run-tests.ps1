@@ -783,4 +783,65 @@ Describe 'repair pipeline (mocked)' {
     }
 }
 
+Describe 'handsfree hi-fi enforcer' {
+    It 'queries hands-free devices without error' {
+        $devices = @(Get-BTFixHandsFreeDevice)
+        Assert-True ($devices -is [array])
+    }
+
+    It 'supports -WhatIf when disabling or enabling hands-free state' {
+        $tempDir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-hf-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $res = Set-BTFixHandsFreeState -State 'Disable' -BackupPath $tempDir -WhatIf
+            Assert-True ($null -ne $res)
+        } finally {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Describe 'battery telemetry' {
+    It 'queries peripheral battery status without throwing' {
+        $bats = @(Get-BTFixBatteryStatus)
+        Assert-True ($bats -is [array])
+        foreach ($b in $bats) {
+            Assert-True ($null -ne $b.FriendlyName)
+            Assert-True ($null -ne $b.Gauge)
+            Assert-True ($b.HasBatteryInfo -is [bool])
+        }
+    }
+}
+
+Describe 'audio codec optimizer' {
+    It 'reads audio codec configuration' {
+        $info = Get-BTFixAudioCodecInfo
+        Assert-True ($null -ne $info)
+        Assert-True ($info.AacEnabled -is [bool])
+        Assert-True ($info.AptxEnabled -is [bool])
+        Assert-True ($info.AbsoluteVolumeDisabled -is [bool])
+    }
+
+    It 'supports -WhatIf for codec preference changes' {
+        $tempDir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-codec-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $ok = Set-BTFixAudioCodecPreference -EnableAac -EnableAptx -BackupPath $tempDir -WhatIf
+            Assert-True ($ok -is [bool])
+        } finally {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+}
+
+Describe 'gaming controller latency' {
+    It 'detects controllers without throwing' {
+        $ctrls = @(Get-BTFixGamingController)
+        Assert-True ($ctrls -is [array])
+    }
+
+    It 'supports -WhatIf for controller latency optimization' {
+        $res = Optimize-BTFixControllerLatency -WhatIf
+        Assert-True ($null -ne $res)
+    }
+}
+
 Write-Summary

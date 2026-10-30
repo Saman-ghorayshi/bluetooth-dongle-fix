@@ -1,8 +1,9 @@
 ﻿<#
 .SYNOPSIS
     BTFix — diagnose and repair USB Bluetooth dongles that Windows refuses to
-    start (Code 31 / CM_PROB_FAILED_ADD) and the Bluetooth stack problems
-    around them.
+    start (Code 31 / CM_PROB_FAILED_ADD), resolve 8kHz Hands-Free telephony
+    voice traps, monitor BLE peripheral battery levels, optimize A2DP audio
+    codecs, and enable esports low-latency controller mode.
 
 .DESCRIPTION
     Read-only by default. -Mode Fix snapshots the current device state,
@@ -17,22 +18,41 @@
     Repairs what can be repaired (elevates itself when needed).
 
 .EXAMPLE
-    .\BTFix.ps1 -Mode Forget -Device "QCY-T13"
-    Forgets a stale pairing so the earbuds can be paired again.
+    .\BTFix.ps1 -Mode HandsFree -State Disable
+    Disables the Hands-Free telephony mic trap to permanently keep Hi-Fi stereo.
+
+.EXAMPLE
+    .\BTFix.ps1 -Mode Battery
+    Inspects real-time battery percentages and gauges for paired devices.
+
+.EXAMPLE
+    .\BTFix.ps1 -Mode Codec -State Enable
+    Optimizes A2DP registry settings to unlock AAC and aptX codecs.
+
+.EXAMPLE
+    .\BTFix.ps1 -Mode GameMode -State Enable
+    Disables USB Selective Suspend to eliminate 50-150ms controller input lag spikes.
 #>
 [CmdletBinding(SupportsShouldProcess)]
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
     Justification = 'BTFix is a console tool: coloured progress output belongs on the host, not in the pipeline.')]
 param(
-    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare')]
+    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare', 'HandsFree', 'Battery', 'Codec', 'GameMode')]
     [string]$Mode = 'Check',
+
+    # State for configurable modes (HandsFree, Codec, GameMode)
+    [ValidateSet('Disable', 'Enable', 'Status', 'Off', 'On')]
+    [string]$State = 'Status',
 
     # Restrict the work to this radio (instance id), e.g.
     # USB\VID_0A12&PID_0001\5&5E7D000&0&3
     [string]$Radio,
 
-    # Paired device to forget (name fragment or instance id).
+    # Paired device to target (name fragment or instance id).
     [string]$Device,
+
+    # Also stop/disable BTAGService (Bluetooth Audio Gateway) in HandsFree mode
+    [switch]$ToggleService,
 
     # When breaking a dual-radio conflict, keep the internal adapter active.
     [switch]$PreferInternal,
@@ -113,15 +133,18 @@ function Invoke-SelfElevated {
 }
 
 $effectiveMode = switch ($Mode) { 'Diagnose' { 'Check' } 'Repair' { 'Fix' } default { $Mode } }
-$needsAdmin = $effectiveMode -in @('Fix', 'Rollback', 'Forget')
+$effectiveState = switch ($State) { 'Off' { 'Disable' } 'On' { 'Enable' } default { $State } }
+$needsAdmin = ($effectiveMode -in @('Fix', 'Rollback', 'Forget')) -or ($effectiveMode -in @('HandsFree', 'Codec', 'GameMode') -and $effectiveState -ne 'Status')
 if ($needsAdmin -and -not (Test-BTFixAdministrator)) {
     if ($NoElevation) {
         Write-Host "Mode '$Mode' needs administrator rights." -ForegroundColor Red
         exit 2
     }
     $forward = @('-Mode', $Mode)
+    if ($State) { $forward += @('-State', $State) }
     if ($Radio) { $forward += @('-Radio', $Radio) }
     if ($Device) { $forward += @('-Device', $Device) }
+    if ($ToggleService) { $forward += '-ToggleService' }
     if ($PreferInternal) { $forward += '-PreferInternal' }
     if ($SearchWindowsUpdate) { $forward += '-SearchWindowsUpdate' }
     if ($DisableUsbSuspend) { $forward += '-DisableUsbSuspend' }
@@ -169,9 +192,9 @@ switch ($effectiveMode) {
         $radios = @(Get-BTFixRadio)
         if ($radios.Count -eq 0) { Write-Host '  (no Bluetooth radio found)' -ForegroundColor Yellow }
         foreach ($r in $radios) {
-            $state = if ($r.IsHealthy) { 'OK' } elseif ($r.IsDisabled) { 'disabled (by us)' } else { "problem code $($r.ProblemCode)" }
+            $radioStateText = if ($r.IsHealthy) { 'OK' } elseif ($r.IsDisabled) { 'disabled (by us)' } else { "problem code $($r.ProblemCode)" }
             $kind = if ($r.IsInternal) { 'internal' } else { 'external' }
-            Write-Host ("  {0,-34} {1,-22} {2,-9} {3}" -f $r.FriendlyName, $r.InstanceId, $kind, $state)
+            Write-Host ("  {0,-34} {1,-22} {2,-9} {3}" -f $r.FriendlyName, $r.InstanceId, $kind, $radioStateText)
         }
         if ($radios.Count -gt 1) {
             $benchmarkable = @($radios | Where-Object { $_.IsHealthy -or $_.IsDisabled })
@@ -184,6 +207,21 @@ switch ($effectiveMode) {
                 Write-Host ("  Superior radio detected: {0} ({1}/100 pts) - run with -Mode Compare for benchmark" -f $comp.SuperiorRadio.FriendlyName, $comp.WinnerScore.Score) -ForegroundColor DarkCyan
             }
         }
+
+        # Paired Peripherals & Battery status
+        $peripherals = @(Get-BTFixBatteryStatus)
+        if ($peripherals.Count -gt 0) {
+            Write-Host ''
+            Write-Host 'Paired Peripherals & Battery' -ForegroundColor Cyan
+            Write-Host '----------------------------'
+            foreach ($p in $peripherals) {
+                $connState = if ($p.IsConnected) { 'Connected' } else { 'Not Connected' }
+                $batText = if ($p.HasBatteryInfo) { "$($p.BatteryPercent)% $($p.Gauge)" } else { 'No battery telemetry' }
+                $color = if ($p.IsConnected) { 'Green' } else { 'DarkGray' }
+                Write-Host ("  {0,-34} {1,-14} {2}" -f $p.FriendlyName, $connState, $batText) -ForegroundColor $color
+            }
+        }
+
         Write-Host ''
         Write-Host ("Findings ({0})" -f $findings.Count) -ForegroundColor Cyan
         Show-Finding -Findings $findings
@@ -239,6 +277,106 @@ switch ($effectiveMode) {
         }
     }
 
+    'HandsFree' {
+        Write-Host ''
+        Write-Host 'Anti-Handsfree Telephony Hi-Fi Enforcer' -ForegroundColor Cyan
+        Write-Host '---------------------------------------' -ForegroundColor Cyan
+        $hfDevices = @(Get-BTFixHandsFreeDevice -Name $Device)
+        if ($effectiveState -eq 'Status') {
+            if ($hfDevices.Count -eq 0) {
+                Write-Host 'No Hands-Free telephony audio endpoints found.' -ForegroundColor Yellow
+            } else {
+                foreach ($d in $hfDevices) {
+                    $stateText = if ($d.IsEnabled) { 'ACTIVE (Will trap voice apps to 8kHz mono)' } else { 'DISABLED (Preserving pristine Hi-Fi Stereo)' }
+                    $color = if ($d.IsEnabled) { 'Yellow' } else { 'Green' }
+                    Write-Host ("  [{0}] {1}" -f $d.Class, $d.FriendlyName) -ForegroundColor White
+                    Write-Host ("      State: {0}" -f $stateText) -ForegroundColor $color
+                    Write-Host ("      ID   : {0}" -f $d.InstanceId) -ForegroundColor DarkGray
+                }
+                Write-Host ''
+                Write-Host 'To force Hi-Fi stereo and disable telephony mic trap:' -ForegroundColor DarkGray
+                Write-Host '  .\BTFix.ps1 -Mode HandsFree -State Disable' -ForegroundColor Cyan
+                Write-Host 'To restore Hands-Free telephony mic:' -ForegroundColor DarkGray
+                Write-Host '  .\BTFix.ps1 -Mode HandsFree -State Enable' -ForegroundColor Cyan
+            }
+        } else {
+            $res = Set-BTFixHandsFreeState -State $effectiveState -Device $Device -ToggleService:$ToggleService -BackupPath $BackupPath -LogPath $LogPath
+            if ($res.Success) {
+                Write-Host ("Hands-Free telephony state updated to: {0}" -f $effectiveState) -ForegroundColor Green
+                Write-Host ("Affected nodes: {0}" -f ($res.Changed -join ', ')) -ForegroundColor DarkGray
+                if ($res.Snapshot) { Write-Host ("State snapshot saved to: {0}" -f $res.Snapshot) -ForegroundColor DarkGray }
+            } else {
+                Write-Host "Failed to update Hands-Free state: $($res.Error)" -ForegroundColor Red
+            }
+        }
+    }
+
+    'Battery' {
+        Write-Host ''
+        Write-Host 'Bluetooth Battery Percentage Inspector' -ForegroundColor Cyan
+        Write-Host '---------------------------------------' -ForegroundColor Cyan
+        $batteries = @(Get-BTFixBatteryStatus -Name $Device)
+        if ($batteries.Count -eq 0) {
+            Write-Host 'No paired Bluetooth peripherals found.' -ForegroundColor Yellow
+        } else {
+            foreach ($b in $batteries) {
+                $conn = if ($b.IsConnected) { 'Connected' } else { 'Disconnected' }
+                $color = if ($b.IsConnected) {
+                    if ($b.HasBatteryInfo -and $b.BatteryPercent -le 20) { 'Red' } else { 'Green' }
+                } else { 'DarkGray' }
+                Write-Host ("  {0,-32} {1,-14} {2}" -f $b.FriendlyName, $conn, $b.Gauge) -ForegroundColor $color
+            }
+        }
+    }
+
+    'Codec' {
+        Write-Host ''
+        Write-Host 'Bluetooth A2DP Audio Codec Optimizer' -ForegroundColor Cyan
+        Write-Host '------------------------------------' -ForegroundColor Cyan
+        $codecInfo = Get-BTFixAudioCodecInfo
+        Write-Host ("  AAC Codec Support      : {0}" -f $(if ($codecInfo.AacEnabled) { 'ENABLED' } else { 'DISABLED' })) -ForegroundColor $(if ($codecInfo.AacEnabled) { 'Green' } else { 'Yellow' })
+        Write-Host ("  aptX Codec Support     : {0}" -f $(if ($codecInfo.AptxEnabled) { 'ENABLED' } else { 'DISABLED' })) -ForegroundColor $(if ($codecInfo.AptxEnabled) { 'Green' } else { 'Yellow' })
+        Write-Host ("  Absolute Volume Status : {0}" -f $(if ($codecInfo.AbsoluteVolumeDisabled) { 'DISABLED (Independent volume control)' } else { 'ENABLED (Synced volume)' })) -ForegroundColor White
+        
+        if ($effectiveState -eq 'Disable') {
+            $ok = Set-BTFixAudioCodecPreference -DisableAac -DisableAptx -BackupPath $BackupPath -LogPath $LogPath
+            if ($ok) { Write-Host 'High-bitrate codecs disabled (forced SBC baseline).' -ForegroundColor Yellow }
+        } elseif ($effectiveState -eq 'Enable') {
+            $ok = Set-BTFixAudioCodecPreference -EnableAac -EnableAptx -BackupPath $BackupPath -LogPath $LogPath
+            if ($ok) { Write-Host 'High-bitrate codecs enabled (AAC + aptX unlocked).' -ForegroundColor Green }
+        } else {
+            Write-Host ''
+            Write-Host 'To unlock AAC and aptX codecs:' -ForegroundColor DarkGray
+            Write-Host '  .\BTFix.ps1 -Mode Codec -State Enable' -ForegroundColor Cyan
+        }
+    }
+
+    'GameMode' {
+        Write-Host ''
+        Write-Host 'Gaming Controller Low-Latency Esports Mode' -ForegroundColor Cyan
+        Write-Host '------------------------------------------' -ForegroundColor Cyan
+        $controllers = @(Get-BTFixGamingController)
+        if ($controllers.Count -eq 0) {
+            Write-Host 'No gaming controllers (DualSense, Xbox, Switch Pro) currently detected.' -ForegroundColor Yellow
+        } else {
+            Write-Host ("Detected {0} gaming controller(s):" -f $controllers.Count) -ForegroundColor Green
+            foreach ($c in $controllers) {
+                Write-Host ("  - {0} ({1}) [{2}] - {3}" -f $c.Model, $c.Vendor, $c.Status, $(if ($c.IsConnected) { 'Connected' } else { 'Disconnected' })) -ForegroundColor White
+            }
+        }
+        if ($effectiveState -eq 'Enable') {
+            $res = Optimize-BTFixControllerLatency -BackupPath $BackupPath -LogPath $LogPath
+            if ($res.Success) {
+                Write-Host 'Esports Mode applied: USB Selective Suspend disabled for all active Bluetooth adapters.' -ForegroundColor Green
+                foreach ($a in $res.OptimizedAdapters) { Write-Host ("  + Optimized adapter: {0}" -f $a) -ForegroundColor DarkGray }
+            }
+        } else {
+            Write-Host ''
+            Write-Host 'To eliminate USB suspend latency spikes (50-150ms input lag):' -ForegroundColor DarkGray
+            Write-Host '  .\BTFix.ps1 -Mode GameMode -State Enable' -ForegroundColor Cyan
+        }
+    }
+
     'Chipsets' {
         Write-Host ''
         Write-Host 'Known chipset families' -ForegroundColor Cyan
@@ -268,28 +406,28 @@ switch ($effectiveMode) {
         $radios = @(Get-BTFixRadio)
         if ($radios.Count -eq 0) {
             Write-Host 'No Bluetooth radios detected.' -ForegroundColor Yellow
-            break
-        }
-        Write-Host ''
-        Write-Host 'Bluetooth Radio Superiority Benchmark' -ForegroundColor Cyan
-        Write-Host '-------------------------------------' -ForegroundColor Cyan
-        $comp = Get-BTFixSuperiorRadio -Radios $radios
-        foreach ($eval in $comp.Scores) {
-            $r = $eval.Radio
-            $isSup = ($r.InstanceId -eq $comp.SuperiorRadio.InstanceId)
-            $tag = if ($isSup) { '[SUPERIOR *]' } else { '            ' }
-            $tagColor = if ($isSup) { 'Green' } else { 'DarkGray' }
+        } else {
             Write-Host ''
-            Write-Host ("  {0} {1} ({2})" -f $tag, $r.FriendlyName, $eval.BluetoothVersion) -ForegroundColor $tagColor
-            Write-Host ("      Hardware ID : {0}" -f ($r.HardwareIds -join ', ')) -ForegroundColor DarkGray
-            Write-Host ("      Placement   : {0}" -f $(if ($r.IsInternal) { 'Internal (Laptop Motherboard)' } else { 'External (USB Dongle)' })) -ForegroundColor White
-            Write-Host ("      Total Score : {0}/100" -f $eval.Score) -ForegroundColor $(if ($isSup) { 'Green' } else { 'Yellow' })
-            foreach ($fact in $eval.Factors) {
-                Write-Host ("        + {0}" -f $fact) -ForegroundColor DarkGray
+            Write-Host 'Bluetooth Radio Superiority Benchmark' -ForegroundColor Cyan
+            Write-Host '-------------------------------------' -ForegroundColor Cyan
+            $comp = Get-BTFixSuperiorRadio -Radios $radios
+            foreach ($eval in $comp.Scores) {
+                $r = $eval.Radio
+                $isSup = ($r.InstanceId -eq $comp.SuperiorRadio.InstanceId)
+                $tag = if ($isSup) { '[SUPERIOR *]' } else { '            ' }
+                $tagColor = if ($isSup) { 'Green' } else { 'DarkGray' }
+                Write-Host ''
+                Write-Host ("  {0} {1} ({2})" -f $tag, $r.FriendlyName, $eval.BluetoothVersion) -ForegroundColor $tagColor
+                Write-Host ("      Hardware ID : {0}" -f ($r.HardwareIds -join ', ')) -ForegroundColor DarkGray
+                Write-Host ("      Placement   : {0}" -f $(if ($r.IsInternal) { 'Internal (Laptop Motherboard)' } else { 'External (USB Dongle)' })) -ForegroundColor White
+                Write-Host ("      Total Score : {0}/100" -f $eval.Score) -ForegroundColor $(if ($isSup) { 'Green' } else { 'Yellow' })
+                foreach ($fact in $eval.Factors) {
+                    Write-Host ("        + {0}" -f $fact) -ForegroundColor DarkGray
+                }
             }
+            Write-Host ''
+            Write-Host "Recommendation: $($comp.Reason)" -ForegroundColor Cyan
         }
-        Write-Host ''
-        Write-Host "Recommendation: $($comp.Reason)" -ForegroundColor Cyan
     }
 }
 
