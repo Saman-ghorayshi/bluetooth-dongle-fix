@@ -511,6 +511,123 @@
       font-size: 0.8rem;
     }
 
+    /* Troubleshooter Wizard */
+    .wizard-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+      margin: 30px 0;
+    }
+    .wizard-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 22px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .wizard-card:hover {
+      border-color: var(--accent-blue);
+      transform: translateY(-2px);
+    }
+    .wizard-card.active {
+      border-color: var(--accent-blue);
+      background: rgba(56, 189, 248, 0.08);
+      box-shadow: 0 0 16px rgba(56, 189, 248, 0.2);
+    }
+    .wizard-icon {
+      font-size: 1.6rem;
+      margin-bottom: 10px;
+    }
+    .wizard-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+      color: #FFF;
+      margin-bottom: 4px;
+    }
+    .wizard-sub {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+    }
+    .wizard-solution {
+      background: #090D16;
+      border: 1px solid #1E293B;
+      border-radius: 14px;
+      padding: 28px;
+      margin-top: 24px;
+    }
+    .wizard-solution h3 {
+      font-size: 1.25rem;
+      font-weight: 800;
+      color: #FFF;
+      margin-bottom: 12px;
+    }
+    .wizard-solution p {
+      font-size: 0.95rem;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: 16px;
+    }
+    .solution-cmd {
+      background: #050811;
+      border: 1px solid #1E293B;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-family: var(--mono);
+      font-size: 0.9rem;
+      color: var(--accent-blue);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 14px 0;
+    }
+
+    /* FAQ Section */
+    .faq-wrap {
+      max-width: 880px;
+      margin: 30px auto;
+    }
+    .faq-item {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      margin-bottom: 14px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .faq-item:hover {
+      border-color: #2E3D5B;
+    }
+    .faq-question {
+      padding: 20px 24px;
+      font-weight: 700;
+      font-size: 1.05rem;
+      color: #FFF;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      user-select: none;
+    }
+    .faq-toggle {
+      font-size: 1.2rem;
+      color: var(--accent-blue);
+      transition: transform 0.2s;
+    }
+    .faq-item.open .faq-toggle {
+      transform: rotate(45deg);
+    }
+    .faq-answer {
+      padding: 0 24px 22px;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      line-height: 1.65;
+      display: none;
+    }
+    .faq-item.open .faq-answer {
+      display: block;
+    }
+
     /* Footer */
     footer {
       border-top: 1px solid var(--card-border);
@@ -536,7 +653,9 @@
         <a href="#how-it-works">How It Works</a>
         <a href="#simulator">Benchmark Engine</a>
         <a href="#codecs">RF &amp; Codecs</a>
+        <a href="#troubleshooter">Troubleshooter</a>
         <a href="#compatibility">Peripherals</a>
+        <a href="#faq">FAQ</a>
         <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix" class="btn-github" target="_blank" rel="noopener">
           ⭐ GitHub Repository
         </a>
@@ -906,6 +1025,122 @@
         </tbody>
       </table>
     </section>
+
+    <!-- Interactive Symptom Troubleshooter Wizard -->
+    <section class="container" id="troubleshooter">
+      <div class="section-title">
+        <h2>Interactive Symptom Troubleshooter</h2>
+        <p>Select your exact symptom to reveal the hardware root cause and instant 1-click fix.</p>
+      </div>
+
+      <div class="wizard-grid">
+        <div class="wizard-card active" onclick="selectSymptom('code31', this)">
+          <div class="wizard-icon">🔴</div>
+          <div class="wizard-title">Code 31 (Failed Add)</div>
+          <div class="wizard-sub">USB dongle blocked with yellow warning triangle</div>
+        </div>
+        <div class="wizard-card" onclick="selectSymptom('stutter', this)">
+          <div class="wizard-icon">⚡</div>
+          <div class="wizard-title">Audio Stutter &amp; Cutouts</div>
+          <div class="wizard-sub">AirPods / Sony / Bose drop sound periodically</div>
+        </div>
+        <div class="wizard-card" onclick="selectSymptom('handsfree', this)">
+          <div class="wizard-icon">📞</div>
+          <div class="wizard-title">Mono Hands-Free Lock</div>
+          <div class="wizard-sub">Discord or Zoom cuts stereo playback to 8kHz</div>
+        </div>
+        <div class="wizard-card" onclick="selectSymptom('toggle', this)">
+          <div class="wizard-icon">🔘</div>
+          <div class="wizard-title">Bluetooth Toggle Missing</div>
+          <div class="wizard-sub">Quick Settings icon vanished completely</div>
+        </div>
+        <div class="wizard-card" onclick="selectSymptom('phantom', this)">
+          <div class="wizard-icon">👻</div>
+          <div class="wizard-title">Phantom Device (Code 45)</div>
+          <div class="wizard-sub">Headphones show paired but refuse to connect</div>
+        </div>
+        <div class="wizard-card" onclick="selectSymptom('sleep', this)">
+          <div class="wizard-icon">💤</div>
+          <div class="wizard-title">Vanishes After Sleep</div>
+          <div class="wizard-sub">Must unplug and replug USB adapter every wake</div>
+        </div>
+      </div>
+
+      <div class="wizard-solution" id="solutionBox">
+        <h3 id="solTitle">🔴 Dual-Radio Stack Lockout (Code 31)</h3>
+        <p id="solDesc">
+          Windows booted first onto your motherboard Wi-Fi/Bluetooth combo card and claimed the exclusive Bluetooth stack (<code>bthserv</code>). When you plugged in your high-performance USB dongle, Windows refused to initialize it, throwing <strong>CM_PROB_FAILED_ADD (Code 31)</strong>.
+        </p>
+        <div style="font-size: 0.9rem; font-weight: 700; color: #FFF; margin-bottom: 6px;">Recommended Solution:</div>
+        <div class="solution-cmd">
+          <span id="solCmd">.\BTFix.ps1 -Mode Fix</span>
+          <button class="btn-copy" onclick="copySnippet(document.getElementById('solCmd').textContent, this)">📋 Copy</button>
+        </div>
+        <p id="solNote" style="font-size: 0.85rem; color: var(--accent-green); margin-top: 10px;">
+          ✓ Automatically evaluates radio superiority, safely parks the internal radio into standby (Code 22), binds the USB dongle, and takes a 100% reversible backup.
+        </p>
+      </div>
+    </section>
+
+    <!-- Frequently Asked Questions (FAQ) -->
+    <section class="container" id="faq">
+      <div class="section-title">
+        <h2>Frequently Asked Questions</h2>
+        <p>Clear facts on Windows Bluetooth architecture, driver myths, and adapter arbitration.</p>
+      </div>
+
+      <div class="faq-wrap">
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Why does Device Manager report my Bluetooth driver is from June 21, 2006?</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            This is intentional Microsoft engineering. All in-box generic Windows drivers carry the release date of Windows Vista (June 21, 2006). Microsoft stamps this timestamp so that if you or an OEM ever install a manufacturer-specific driver, Windows will treat that driver as newer and allow it to install without an artificial version collision. Your driver is not outdated!
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Why shouldn't I use third-party "Driver Updater" software?</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            Third-party utilities often download repackaged or modified INF files from untrusted mirrors. These drivers frequently clobber <code>bth.inf</code>, replace working Microsoft class drivers with unsigned binaries, or fail Windows Memory Integrity (HVCI) checks with Code 48. Bluetooth Code 31 is almost never a driver problem; it is a multi-adapter arbitration conflict.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>What happens if I unplug my external USB Bluetooth dongle later?</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            BTFix includes automatic single-radio fail-safe recovery. If you ever unplug your USB dongle, simply run <code>.\BTFix.ps1 -Mode Fix</code> or <code>.\BTFix.ps1 -Mode Rollback</code>. BTFix detects that only one radio exists and immediately restores the motherboard adapter to active status.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Does BTFix need to stay running in the background?</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            No! BTFix is not a resident background process and uses 0% CPU and 0 MB of RAM once closed. It applies standard Windows Plug-and-Play device state commands and registry policies directly to the operating system, then exits completely.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Does this require administrator privileges?</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            Standard diagnostic inspections (<code>-Mode Check</code> and <code>-Mode Compare</code>) run without elevation. Mutating hardware state (<code>-Mode Fix</code> or <code>-Mode Rollback</code>) requires administrator rights because Windows PnP device enablement and service restarts are protected OS operations. BTFix prompts for elevation automatically via native Windows UAC.
+          </div>
+        </div>
+      </div>
+    </section>
   </main>
 
   <footer>
@@ -1013,6 +1248,77 @@
       if (!el) return;
       el.textContent = isGood ? goodText : badText;
       el.className = "codec-status " + className;
+    }
+
+    const symptoms = {
+      code31: {
+        title: "🔴 Dual-Radio Stack Lockout (Code 31)",
+        desc: "Windows booted first onto your motherboard Wi-Fi/Bluetooth combo card and claimed the exclusive Bluetooth stack (bthserv). When you plugged in your high-performance USB dongle, Windows refused to initialize it, throwing CM_PROB_FAILED_ADD (Code 31).",
+        cmd: ".\\BTFix.ps1 -Mode Fix",
+        note: "✓ Automatically evaluates radio superiority, safely parks the internal radio into standby (Code 22), binds the USB dongle, and takes a 100% reversible backup."
+      },
+      stutter: {
+        title: "⚡ 2.4GHz Wi-Fi Coexistence & USB Sleep Stutters",
+        desc: "High-bitrate codecs (LDAC at 990kbps or AAC at 256kbps) require sustained RF throughput. Laptop internal combo cards share an antenna cavity with Wi-Fi, causing burst packet collisions. Additionally, Windows USB Selective Suspend drops dongle power after brief silence.",
+        cmd: ".\\BTFix.ps1 -Mode Fix -DisableUsbSuspend",
+        note: "✓ Migrates audio to your dedicated external dongle and permanently disables USB Selective Suspend on the dongle root port."
+      },
+      handsfree: {
+        title: "📞 Hands-Free Telephony (HFP) Profile Lock",
+        desc: "When apps like Discord, Teams, or Zoom activate microphone access, Windows switches Bluetooth audio from the high-fidelity A2DP stereo sink (44.1/48kHz) to the bi-directional Hands-Free Audio Gateway (8kHz or 16kHz mono), degrading all system sound.",
+        cmd: ".\\BTFix.ps1 -Mode Fix; Restart-Service AudioEndpointBuilder",
+        note: "✓ Flushes the Windows Audio Endpoint Builder topology and resets paired peripheral service endpoints."
+      },
+      toggle: {
+        title: "🔘 Bluetooth Software Radio Switch Stuck",
+        desc: "Windows stores a system-wide radio switch in 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Radio Management'. If a crash occurred during sleep, the registry key locks SystemRadioState=1, making Bluetooth disappear from Quick Settings even when hardware is healthy.",
+        cmd: ".\\BTFix.ps1 -Mode Fix",
+        note: "✓ Queries and clears SystemRadioState and restarts the core Windows Bluetooth Support Service (bthserv)."
+      },
+      phantom: {
+        title: "👻 Phantom Endpoint Conflict (Code 45)",
+        desc: "When an earbud or controller disconnects abruptly, Windows sometimes keeps stale BTHENUM/BTHLE registry nodes active as phantom devices (Code 45 / CM_PROB_PHANTOM), refusing to accept fresh pairing handshakes.",
+        cmd: ".\\BTFix.ps1 -Mode Forget -Device \"YourDeviceName\"",
+        note: "✓ Safely purges stale PnP device nodes with pnputil, allowing your headphones to pair and connect cleanly."
+      },
+      sleep: {
+        title: "💤 USB Selective Suspend Power Lockup",
+        desc: "Windows aggressively powers down external USB dongles into D3 cold state after 3-5 minutes of idle. Many Realtek and CSR dongles fail to wake without physical replugging.",
+        cmd: ".\\BTFix.ps1 -Mode Fix -DisableUsbSuspend",
+        note: "✓ Configures EnhancedPowerManagementEnabled=0 in the registry for your dongle instance, ensuring 24/7 instant connectivity."
+      }
+    };
+
+    function selectSymptom(key, elem) {
+      document.querySelectorAll('.wizard-card').forEach(c => c.classList.remove('active'));
+      if (elem) elem.classList.add('active');
+
+      const data = symptoms[key];
+      if (!data) return;
+
+      document.getElementById('solTitle').textContent = data.title;
+      document.getElementById('solDesc').textContent = data.desc;
+      document.getElementById('solCmd').textContent = data.cmd;
+      document.getElementById('solNote').textContent = data.note;
+    }
+
+    function toggleFaq(elem) {
+      const parent = elem.closest('.faq-item');
+      if (parent) {
+        parent.classList.toggle('open');
+      }
+    }
+
+    function copySnippet(text, btn) {
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = btn.textContent;
+        btn.textContent = "✓ Copied!";
+        btn.classList.add("copied");
+        setTimeout(() => {
+          btn.textContent = orig;
+          btn.classList.remove("copied");
+        }, 2000);
+      });
     }
 
     // Run on load

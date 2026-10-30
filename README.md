@@ -222,6 +222,34 @@ passed: 63   failed: 0
 
 ---
 
+## ❓ Frequently Asked Questions (FAQ)
+
+<details>
+<summary><b>Why does Device Manager say my Bluetooth driver is from June 21, 2006?</b></summary>
+<br>
+This is intentional Microsoft engineering. All in-box generic Windows drivers carry the release date of Windows Vista (June 21, 2006). Microsoft stamps this timestamp so that if you or an OEM ever install a manufacturer-specific driver, Windows will treat that driver as newer and allow it to install without an artificial version collision. Your driver is not outdated!
+</details>
+
+<details>
+<summary><b>Why shouldn't I use third-party "Driver Updater" tools?</b></summary>
+<br>
+Third-party utilities often download repackaged or modified INF files from untrusted mirrors. These drivers frequently clobber <code>bth.inf</code>, replace working Microsoft class drivers with unsigned binaries, or fail Windows Memory Integrity (HVCI) checks with Code 48. Bluetooth Code 31 is almost never a driver problem; it is a multi-adapter arbitration conflict.
+</details>
+
+<details>
+<summary><b>What happens if I unplug my external USB Bluetooth dongle later?</b></summary>
+<br>
+BTFix includes automatic single-radio fail-safe recovery. If you ever unplug your USB dongle, simply run <code>.\BTFix.ps1 -Mode Fix</code> or <code>.\BTFix.ps1 -Mode Rollback</code>. BTFix detects that only one radio exists and immediately restores the motherboard adapter to active status.
+</details>
+
+<details>
+<summary><b>Does BTFix need to stay running in the background?</b></summary>
+<br>
+No! BTFix is not a resident background process and uses 0% CPU and 0 MB of RAM once closed. It applies standard Windows Plug-and-Play device state commands and registry policies directly to the operating system, then exits completely.
+</details>
+
+---
+
 ## 🤝 Contributing
 
 Contributions are warmly welcomed! Please check [CONTRIBUTING.md](CONTRIBUTING.md) for details on adding new chipset profiles, test cases, or peripheral workarounds.
