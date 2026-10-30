@@ -231,6 +231,7 @@ if ($integrity.BaselineSource -eq 'none' -and (Test-BTFixAdministrator)) {
                 <Button x:Name="BtnHiFiMode" Content="🛡️ Anti-HandsFree Hi-Fi" Margin="0,0,8,0" ToolTip="Disables Hands-Free telephony mic trap so Discord/Zoom/Teams never downgrade audio to 8kHz mono."/>
                 <Button x:Name="BtnGameMode" Content="🎮 Esports Game Mode" Margin="0,0,8,0" ToolTip="Disables USB Selective Suspend and polling throttling for lowest latency on DualSense, Xbox, and Switch controllers."/>
                 <Button x:Name="BtnCodec" Content="🎵 Unlock AAC/aptX" Margin="0,0,8,0" ToolTip="Optimizes Windows A2DP registry settings to unlock high-bitrate AAC and aptX codecs."/>
+                <Button x:Name="BtnLEAudio" Content="⚡ LE Audio &amp; LC3" Margin="0,0,8,0" ToolTip="Enforces Windows 11 Bluetooth LE Audio, LC3 codec, and Auracast broadcast preference."/>
                 <Button x:Name="BtnScan" Content="🔍 Scan &amp; Benchmark" Margin="0,0,8,0" ToolTip="Refreshes hardware inventory and recalculates superiority scores."/>
                 <Button x:Name="BtnRestartAudio" Content="🎧 Fix Audio Drops" Margin="0,0,8,0" ToolTip="Restarts BTAGService and Windows AudioEndpointBuilder to re-route audio to earbuds without rebooting."/>
                 <Button x:Name="BtnRollback" Content="🔄 Rollback" Margin="0,0,8,0" ToolTip="Restores hardware state from the latest backup snapshot."/>
@@ -284,6 +285,7 @@ $btnAutoFix           = $window.FindName('BtnAutoFix')
 $btnHiFiMode          = $window.FindName('BtnHiFiMode')
 $btnGameMode          = $window.FindName('BtnGameMode')
 $btnCodec             = $window.FindName('BtnCodec')
+$btnLEAudio           = $window.FindName('BtnLEAudio')
 $btnScan              = $window.FindName('BtnScan')
 $btnRestartAudio      = $window.FindName('BtnRestartAudio')
 $btnRollback          = $window.FindName('BtnRollback')
@@ -648,7 +650,7 @@ function Set-GuiActionButtonState {
     [CmdletBinding(SupportsShouldProcess)]
     param([bool]$Enabled)
     if ($PSCmdlet.ShouldProcess('action buttons', "Set enabled=$Enabled")) {
-        foreach ($b in @($btnAutoFix, $btnScan, $btnRestartAudio, $btnRollback, $btnHiFiMode, $btnGameMode, $btnCodec)) {
+        foreach ($b in @($btnAutoFix, $btnScan, $btnRestartAudio, $btnRollback, $btnHiFiMode, $btnGameMode, $btnCodec, $btnLEAudio)) {
             if ($b) { $b.IsEnabled = $Enabled }
         }
     }
@@ -656,7 +658,7 @@ function Set-GuiActionButtonState {
 
 function Start-GuiCliMode {
     [CmdletBinding(SupportsShouldProcess)]
-    param([ValidateSet('Fix', 'Rollback', 'HandsFree', 'Codec', 'GameMode')][string]$Mode, [string[]]$ExtraArgs = @())
+    param([ValidateSet('Fix', 'Rollback', 'HandsFree', 'Codec', 'GameMode', 'LEAudio')][string]$Mode, [string[]]$ExtraArgs = @())
     if ($script:GuiCliProcess -and -not $script:GuiCliProcess.HasExited) {
         Write-GuiLog 'WARN' 'A repair is already running - wait for it to finish.'
         return $false
@@ -792,6 +794,18 @@ $btnCodec.Add_Click({
     Set-GuiActionButtonState -Enabled $false
     Write-GuiLog 'ACTION' 'Unlocking high-bitrate AAC and aptX codecs...'
     if (-not (Start-GuiCliMode -Mode 'Codec' -ExtraArgs @('-State', 'Enable'))) {
+        Set-GuiActionButtonState -Enabled $true
+    }
+})
+
+$btnLEAudio.Add_Click({
+    if (-not (Test-BTFixAdministrator)) {
+        [System.Windows.MessageBox]::Show('Administrator rights are required to configure Bluetooth LE Audio policy.', 'Administrator Required', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
+        return
+    }
+    Set-GuiActionButtonState -Enabled $false
+    Write-GuiLog 'ACTION' 'Configuring Windows 11 Bluetooth LE Audio & LC3 Codec preference...'
+    if (-not (Start-GuiCliMode -Mode 'LEAudio' -ExtraArgs @('-State', 'Enable'))) {
         Set-GuiActionButtonState -Enabled $true
     }
 })

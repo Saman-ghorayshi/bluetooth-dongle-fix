@@ -37,11 +37,11 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
     Justification = 'BTFix is a console tool: coloured progress output belongs on the host, not in the pipeline.')]
 param(
-    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare', 'HandsFree', 'Battery', 'Codec', 'GameMode')]
+    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare', 'HandsFree', 'Battery', 'Codec', 'GameMode', 'LEAudio')]
     [string]$Mode = 'Check',
 
-    # State for configurable modes (HandsFree, Codec, GameMode)
-    [ValidateSet('Disable', 'Enable', 'Status', 'Off', 'On')]
+    # State for configurable modes (HandsFree, Codec, GameMode, LEAudio)
+    [ValidateSet('Disable', 'Enable', 'Status', 'Off', 'On', 'Default')]
     [string]$State = 'Status',
 
     # Restrict the work to this radio (instance id), e.g.
@@ -206,6 +206,19 @@ switch ($effectiveMode) {
                 Write-Host ''
                 Write-Host ("  Superior radio detected: {0} ({1}/100 pts) - run with -Mode Compare for benchmark" -f $comp.SuperiorRadio.FriendlyName, $comp.WinnerScore.Score) -ForegroundColor DarkCyan
             }
+        }
+
+        # Bluetooth LE Audio & Auracast Status
+        $leCap = Get-BTFixLEAudioCapability -Radios $radios
+        if ($leCap.IsSupportedOS) {
+            $leStatusText = if ($leCap.RadioSupported) {
+                if ($leCap.UserPrefersClassic -eq $true) { 'Disabled (Forced Classic Fallback)' }
+                elseif ($leCap.AuracastReady) { 'Ready (LC3 & Auracast broadcast supported)' }
+                else { 'Supported (LC3 unicast supported)' }
+            } else {
+                'Hardware Limited (Requires BT 5.2+ radio)'
+            }
+            Write-Host ("  Bluetooth LE Audio     : {0} (run -Mode LEAudio for stack details)" -f $leStatusText) -ForegroundColor DarkCyan
         }
 
         # Paired Peripherals & Battery status
@@ -374,6 +387,76 @@ switch ($effectiveMode) {
             Write-Host ''
             Write-Host 'To eliminate USB suspend latency spikes (50-150ms input lag):' -ForegroundColor DarkGray
             Write-Host '  .\BTFix.ps1 -Mode GameMode -State Enable' -ForegroundColor Cyan
+        }
+    }
+
+    'LEAudio' {
+        Write-Host ''
+        Write-Host 'Bluetooth LE Audio & LC3 Codec Stack' -ForegroundColor Cyan
+        Write-Host '------------------------------------' -ForegroundColor Cyan
+        $leInfo = Get-BTFixLEAudioCapability
+        
+        $osColor = if ($leInfo.IsSupportedOS) { 'Green' } else { 'Yellow' }
+        $osLabel = if ($leInfo.Is24H2OrNewer) {
+            "Windows 11 Build $($leInfo.WindowsBuild) (24H2+ with Auracast broadcast)"
+        } elseif ($leInfo.IsSupportedOS) {
+            "Windows 11 Build $($leInfo.WindowsBuild) (LE Audio unicast supported)"
+        } else {
+            "Build $($leInfo.WindowsBuild) (Windows 11 22H2+ required)"
+        }
+        Write-Host ("  Operating System       : {0}" -f $osLabel) -ForegroundColor $osColor
+
+        $hwColor = if ($leInfo.RadioSupported) { 'Green' } else { 'Yellow' }
+        $hwLabel = if ($leInfo.RadioSupported) {
+            "$($leInfo.RadioBtVersion) (LMP $($leInfo.RadioLmpVersion)) - Isochronous Channels (ISOC) supported"
+        } else {
+            if ($leInfo.RadioLmpVersion) {
+                "$($leInfo.RadioBtVersion) (LMP $($leInfo.RadioLmpVersion)) - Hardware limited to BT Classic (LMP 11+ required)"
+            } else {
+                "Unknown / No active radio"
+            }
+        }
+        Write-Host ("  Radio Hardware Spec    : {0}" -f $hwLabel) -ForegroundColor $hwColor
+
+        $drvColor = if ($leInfo.AudioDriverDetected) { 'Green' } else { 'DarkGray' }
+        Write-Host ("  Audio Offload Driver   : {0}" -f $(if ($leInfo.AudioDriverDetected) { 'DETECTED (Intel SST / Realtek LE Audio offload ready)' } else { 'Standard host stack (Offload driver not loaded)' })) -ForegroundColor $drvColor
+
+        $prefColor = if ($leInfo.UserPrefersClassic -eq $false -or ($null -eq $leInfo.UserPrefersClassic -and -not $leInfo.SystemPrefersClassic)) { 'Green' } else { 'Yellow' }
+        $prefLabel = if ($leInfo.UserPrefersClassic -eq $false) {
+            'PREFERRED (LC3 / BAP enabled by user policy)'
+        } elseif ($leInfo.UserPrefersClassic -eq $true) {
+            'DISABLED (Forced Classic Audio fallback by user policy)'
+        } elseif ($leInfo.SystemPrefersClassic) {
+            'DEFAULT (System currently prefers Classic Audio)'
+        } else {
+            'DEFAULT (LE Audio preferred when capable)'
+        }
+        Write-Host ("  LE Audio Policy        : {0}" -f $prefLabel) -ForegroundColor $prefColor
+
+        $auraColor = if ($leInfo.AuracastReady) { 'Green' } else { 'DarkGray' }
+        Write-Host ("  Auracast Broadcast     : {0}" -f $(if ($leInfo.AuracastReady) { 'READY (BT 5.3+ broadcast hardware)' } else { 'Unavailable (Requires BT 5.3+ and Win 11 23H2+)' })) -ForegroundColor $auraColor
+
+        if ($effectiveState -eq 'Enable') {
+            $res = Set-BTFixLEAudioPreference -State Enable -RestartService -BackupPath $BackupPath -LogPath $LogPath
+            if ($res.Success) {
+                Write-Host 'Bluetooth LE Audio policy updated: UserPrefersClassicAudio=0 (LE Audio preferred).' -ForegroundColor Green
+            }
+        } elseif ($effectiveState -eq 'Disable') {
+            $res = Set-BTFixLEAudioPreference -State Disable -RestartService -BackupPath $BackupPath -LogPath $LogPath
+            if ($res.Success) {
+                Write-Host 'Bluetooth LE Audio policy updated: UserPrefersClassicAudio=1 (Classic Audio forced).' -ForegroundColor Yellow
+            }
+        } elseif ($State -eq 'Default') {
+            $res = Set-BTFixLEAudioPreference -State Default -RestartService -BackupPath $BackupPath -LogPath $LogPath
+            if ($res.Success) {
+                Write-Host 'Bluetooth LE Audio policy reverted to default system setting.' -ForegroundColor Green
+            }
+        } else {
+            Write-Host ''
+            Write-Host 'To enforce Bluetooth LE Audio (LC3 / Auracast):' -ForegroundColor DarkGray
+            Write-Host '  .\BTFix.ps1 -Mode LEAudio -State Enable' -ForegroundColor Cyan
+            Write-Host 'To force legacy Classic Audio fallback:' -ForegroundColor DarkGray
+            Write-Host '  .\BTFix.ps1 -Mode LEAudio -State Disable' -ForegroundColor Cyan
         }
     }
 

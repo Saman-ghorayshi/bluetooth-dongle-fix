@@ -672,6 +672,197 @@ function Optimize-BTFixControllerLatency {
     }
 }
 
+<#
+.SYNOPSIS
+Detects Windows 11 Bluetooth LE Audio, LC3 codec, and Auracast broadcast stack support.
+.DESCRIPTION
+Evaluates OS build (22H2 22621+ for LE Audio unicast, 24H2 26100+ for Auracast),
+radio hardware controller spec (LMP 11+ / Bluetooth Core 5.2+ required
+for Isochronous Channels), audio offload driver detection (LEAudioCapableAudioDriverDetected),
+BthAvctpSvc status, and user/system preference overrides (UserPrefersClassicAudio).
+#>
+function Get-BTFixLEAudioCapability {
+    [CmdletBinding()]
+    [OutputType([object])]
+    param(
+        [Parameter()][object[]]$Radios
+    )
+
+    $build = 0
+    try {
+        $regVal = (Get-ItemProperty -Path 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion' -Name 'CurrentBuildNumber' -ErrorAction SilentlyContinue).CurrentBuildNumber
+        if ($regVal) { $build = [int]$regVal }
+    } catch {
+        $null = $_
+    }
+    if ($build -eq 0) { $build = [Environment]::OSVersion.Version.Build }
+
+    $isSupportedOS = ($build -ge 22621)
+    $is24H2OrNewer = ($build -ge 26100)
+
+    $targetRadios = [System.Collections.ArrayList]::new()
+    if ($null -ne $Radios) {
+        foreach ($item in $Radios) { $null = $targetRadios.Add($item) }
+    } else {
+        if (Get-Command 'Get-BTFixRadio' -ErrorAction SilentlyContinue) {
+            $found = Get-BTFixRadio
+            if ($null -ne $found) {
+                foreach ($item in $found) {
+                    if ($item.IsHealthy) { $null = $targetRadios.Add($item) }
+                }
+            }
+        }
+    }
+
+    $activeLmp = $null
+    $activeBtVer = 'Unknown'
+    if ($targetRadios.Count -ge 1) {
+        $r = $targetRadios[0]
+        if ($r.PSObject.Properties['LmpVersion'] -and $null -ne $r.LmpVersion) {
+            $activeLmp = [int]$r.LmpVersion
+        } elseif ($r.PSObject.Properties['AllProperties'] -and $r.AllProperties -and $r.AllProperties.ContainsKey('DEVPKEY_Bluetooth_RadioLmpVersion')) {
+            $activeLmp = [int]$r.AllProperties['DEVPKEY_Bluetooth_RadioLmpVersion']
+        }
+        if ($null -ne $activeLmp -and (Get-Command 'Get-BTFixLmpVersionName' -ErrorAction SilentlyContinue)) {
+            $activeBtVer = Get-BTFixLmpVersionName -LmpVersion $activeLmp
+        }
+    }
+
+    $radioSupported = ($null -ne $activeLmp -and $activeLmp -ge 11)
+
+    $svc = Get-Service -Name 'BthAvctpSvc' -ErrorAction SilentlyContinue
+    $batsKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\BthAvctpSvc\Parameters\Bats'
+    $bats = $null
+    if (Test-Path -LiteralPath $batsKey) {
+        $bats = Get-ItemProperty -LiteralPath $batsKey -ErrorAction SilentlyContinue
+    }
+
+    $driverDetected = $false
+    $sysPrefersClassic = $false
+    $userPrefersClassic = $null
+
+    if ($bats) {
+        if ($bats.PSObject.Properties['LEAudioCapableAudioDriverDetected']) {
+            $driverDetected = ([int]$bats.LEAudioCapableAudioDriverDetected -eq 1)
+        }
+        if ($bats.PSObject.Properties['SystemCurrentlyPrefersClassicAudio']) {
+            $sysPrefersClassic = ([int]$bats.SystemCurrentlyPrefersClassicAudio -eq 1)
+        }
+        if ($bats.PSObject.Properties['UserPrefersClassicAudio']) {
+            $userPrefersClassic = ([int]$bats.UserPrefersClassicAudio -eq 1)
+        }
+    }
+
+    $effectiveState = if (-not $isSupportedOS) {
+        'UnsupportedOS'
+    } elseif (-not $radioSupported) {
+        'UnsupportedRadioHardware'
+    } elseif ($userPrefersClassic -eq $true) {
+        'ClassicForcedByUser'
+    } elseif ($userPrefersClassic -eq $false) {
+        'LEAudioForcedByUser'
+    } elseif ($sysPrefersClassic) {
+        'ClassicForcedBySystem'
+    } elseif ($driverDetected) {
+        'LEAudioActive'
+    } else {
+        'AwaitingOffloadDriverOrSink'
+    }
+
+    $auracastReady = ($isSupportedOS -and $radioSupported -and $activeLmp -ge 12)
+
+    return [pscustomobject]@{
+        IsSupportedOS           = $isSupportedOS
+        Is24H2OrNewer           = $is24H2OrNewer
+        WindowsBuild            = $build
+        RadioSupported          = $radioSupported
+        RadioLmpVersion         = $activeLmp
+        RadioBtVersion          = $activeBtVer
+        AudioDriverDetected     = $driverDetected
+        ServiceRunning          = ($svc -and $svc.Status -eq 'Running')
+        UserPrefersClassic      = $userPrefersClassic
+        SystemPrefersClassic    = $sysPrefersClassic
+        EffectiveState          = $effectiveState
+        AuracastReady           = $auracastReady
+    }
+}
+
+<#
+.SYNOPSIS
+Configures the Windows 11 Bluetooth LE Audio preference policy.
+.DESCRIPTION
+Modifies UserPrefersClassicAudio under HKLM:\SYSTEM\CurrentControlSet\Services\BthAvctpSvc\Parameters\Bats.
+-State Enable sets UserPrefersClassicAudio=0 (prefer LE Audio / LC3).
+-State Disable sets UserPrefersClassicAudio=1 (force Classic Audio fallback).
+-State Default removes the override so Windows defaults to dynamic system preference.
+Supports -WhatIf, creates a rollback snapshot, and optionally restarts BthAvctpSvc.
+#>
+function Set-BTFixLEAudioPreference {
+    [CmdletBinding(SupportsShouldProcess)]
+    [OutputType([object])]
+    param(
+        [Parameter(Mandatory)][ValidateSet('Enable', 'Disable', 'Default')][string]$State,
+        [switch]$RestartService,
+        [string]$BackupPath,
+        [string]$LogPath
+    )
+
+    if (-not (Test-BTFixAdministrator)) {
+        Write-BTFixLog -Message 'Administrator rights required to modify Bluetooth LE Audio registry settings.' -Level 'WARN' -Path $LogPath
+        return [pscustomobject]@{ Success = $false; Error = 'Elevation required' }
+    }
+
+    $batsKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\BthAvctpSvc\Parameters\Bats'
+    $stateRoot = if (Get-Command 'Get-BTFixStateRoot' -ErrorAction SilentlyContinue) {
+        Get-BTFixStateRoot -BackupPath $BackupPath
+    } else {
+        if ($BackupPath) { $BackupPath } else { Join-Path $env:LOCALAPPDATA 'BTFix' }
+    }
+    $leAudioDir = Join-Path $stateRoot 'leaudio-backups'
+    if (-not (Test-Path -LiteralPath $leAudioDir)) { New-Item -ItemType Directory -Path $leAudioDir -Force | Out-Null }
+
+    $current = Get-BTFixLEAudioCapability
+    $snapFile = Join-Path $leAudioDir ('leaudio-state-{0}.json' -f (Get-Date -Format 'yyyyMMdd-HHmmss'))
+    $current | ConvertTo-Json | Set-Content -LiteralPath $snapFile -Encoding utf8
+
+    try {
+        if (-not (Test-Path -LiteralPath $batsKey)) {
+            New-Item -Path $batsKey -Force | Out-Null
+        }
+
+        if ($State -eq 'Default') {
+            if ($PSCmdlet.ShouldProcess($batsKey, 'Remove UserPrefersClassicAudio override')) {
+                Remove-ItemProperty -LiteralPath $batsKey -Name 'UserPrefersClassicAudio' -ErrorAction SilentlyContinue
+                Write-BTFixLog -Message "Removed UserPrefersClassicAudio override in $batsKey" -Level 'OK' -Path $LogPath
+            }
+        } else {
+            $val = if ($State -eq 'Disable') { 1 } else { 0 }
+            if ($PSCmdlet.ShouldProcess($batsKey, "Set UserPrefersClassicAudio=$val")) {
+                New-ItemProperty -LiteralPath $batsKey -Name 'UserPrefersClassicAudio' -Value $val -PropertyType DWord -Force | Out-Null
+                $stateLabel = if ($val -eq 0) { 'Preferred / Enabled' } else { 'Forced Classic Fallback' }
+                Write-BTFixLog -Message "Set UserPrefersClassicAudio=$val ($stateLabel) in $batsKey" -Level 'OK' -Path $LogPath
+            }
+        }
+
+        if ($RestartService) {
+            $svc = Get-Service -Name 'BthAvctpSvc' -ErrorAction SilentlyContinue
+            if ($svc -and $svc.Status -eq 'Running') {
+                Restart-Service -Name 'BthAvctpSvc' -Force -ErrorAction SilentlyContinue
+                Write-BTFixLog -Message 'Restarted BthAvctpSvc to apply LE Audio policy changes' -Level 'OK' -Path $LogPath
+            }
+        }
+
+        return [pscustomobject]@{
+            Success  = $true
+            State    = $State
+            Snapshot = $snapFile
+        }
+    } catch {
+        Write-BTFixLog -Message ("Failed to configure LE Audio preference: " + $_.Exception.Message) -Level 'WARN' -Path $LogPath
+        return [pscustomobject]@{ Success = $false; Error = $_.Exception.Message }
+    }
+}
+
 New-Alias -Name Get-BTFixGamingControllers -Value Get-BTFixGamingController -Description 'Backward-compatible alias for Get-BTFixGamingController'
 
 Export-ModuleMember -Function @(
@@ -679,5 +870,6 @@ Export-ModuleMember -Function @(
     'Remove-BTFixPairedDevice', 'Get-BTFixUsbPowerSetting', 'Set-BTFixUsbPowerSetting',
     'Get-BTFixHandsFreeDevice', 'Set-BTFixHandsFreeState', 'Get-BTFixBatteryStatus',
     'Get-BTFixAudioCodecInfo', 'Set-BTFixAudioCodecPreference',
-    'Get-BTFixGamingController', 'Optimize-BTFixControllerLatency'
+    'Get-BTFixGamingController', 'Optimize-BTFixControllerLatency',
+    'Get-BTFixLEAudioCapability', 'Set-BTFixLEAudioPreference'
 ) -Alias @('Get-BTFixGamingControllers')

@@ -1,7 +1,7 @@
 # 🎧 Bluetooth Dongle Fix (BTFix)
 
 <p align="center">
-  <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/actions"><img src="https://img.shields.io/badge/tests-70%2F70%20passing-brightgreen?style=flat-square&logo=github-actions" alt="Tests Status"></a>
+  <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/actions"><img src="https://img.shields.io/badge/tests-76%2F76%20passing-brightgreen?style=flat-square&logo=github-actions" alt="Tests Status"></a>
   <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License MIT"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?style=flat-square&logo=windows" alt="Platform Windows">
   <img src="https://img.shields.io/badge/powershell-5.1%20%7C%207%2B-5391FE?style=flat-square&logo=powershell" alt="PowerShell">
@@ -102,6 +102,15 @@ BTFix includes a native Fluent dark-mode graphical user interface built on Windo
 * **The Cause**: Windows USB Hub Selective Suspend powers down Bluetooth host controllers into low-power D2 states during brief input intervals.
 * **The Fix**: Automatically detects connected gaming controllers, disables USB Selective Suspend across host radios, and enforces continuous polling.
 * **CLI**: `.\BTFix.ps1 -Mode GameMode -State Enable`
+
+### 5. ⚡ Next-Gen Bluetooth LE Audio, LC3 & Auracast (`-Mode LEAudio`)
+* **The Problem**: Windows 11 supports low-latency, high-fidelity LC3 (Low Complexity Communication Codec) and Auracast broadcast sharing, but often falls back to legacy Classic Audio due to driver offload detection state or hidden registry preference policies.
+* **The Fix**: BTFix inspects OS build capability (22H2 22621+ for unicast LC3, 24H2 26100+ for Auracast), Bluetooth Core 5.2+ Isochronous Channels (ISOC LMP >= 11), hardware offload drivers (`LEAudioCapableAudioDriverDetected`), and configures the policy switch `UserPrefersClassicAudio`.
+* **CLI**:
+  * Check LE Audio stack: `.\BTFix.ps1 -Mode LEAudio`
+  * Enforce LE Audio / LC3: `.\BTFix.ps1 -Mode LEAudio -State Enable`
+  * Force Classic Audio fallback: `.\BTFix.ps1 -Mode LEAudio -State Disable`
+  * Restore Windows default preference: `.\BTFix.ps1 -Mode LEAudio -State Default`
 
 ---
 

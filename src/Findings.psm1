@@ -278,6 +278,22 @@ function Get-BTFixFinding {
         }
     }
 
+    # --- Bluetooth LE Audio advisory ------------------------------------
+    if (-not $NoLive -and (Get-Command 'Get-BTFixLEAudioCapability' -ErrorAction SilentlyContinue)) {
+        $leCap = Get-BTFixLEAudioCapability -Radios $radios
+        if ($leCap.IsSupportedOS -and $leCap.RadioSupported -and $leCap.UserPrefersClassic -eq $true) {
+            $findings += [pscustomobject]@{
+                Id          = 'leaudio-disabled-by-policy'
+                Severity    = 'Info'
+                Title       = 'Bluetooth LE Audio (LC3) is forced to Classic Audio fallback'
+                Detail      = 'Your Bluetooth adapter supports Bluetooth Core 5.2+ Isochronous Channels, but Windows 11 policy is configured to prefer legacy Classic Audio.'
+                Fix         = 'Enable Bluetooth LE Audio and LC3 codec: .\BTFix.ps1 -Mode LEAudio -State Enable'
+                AutoFixable = $true
+                Data        = @{ LEAudio = $leCap }
+            }
+        }
+    }
+
     $order = @{ High = 0; Medium = 1; Low = 2; Info = 3 }
     return @($findings | Sort-Object -Property @{ Expression = { $order[$_.Severity] } }, Title)
 }

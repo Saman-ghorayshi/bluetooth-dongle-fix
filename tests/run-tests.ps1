@@ -1,4 +1,4 @@
-﻿# BTFix test suite.
+# BTFix test suite.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
 #
@@ -841,6 +841,65 @@ Describe 'gaming controller latency' {
     It 'supports -WhatIf for controller latency optimization' {
         $res = Optimize-BTFixControllerLatency -WhatIf
         Assert-True ($null -ne $res)
+    }
+}
+
+Describe 'bluetooth le audio and auracast stack' {
+    It 'evaluates LE Audio capability object structure' {
+        $cap = Get-BTFixLEAudioCapability
+        Assert-True ($null -ne $cap)
+        Assert-True ($cap.IsSupportedOS -is [bool])
+        Assert-True ($cap.Is24H2OrNewer -is [bool])
+        Assert-True ($cap.RadioSupported -is [bool])
+        Assert-True ($cap.AudioDriverDetected -is [bool])
+        Assert-True ($cap.ServiceRunning -is [bool])
+        Assert-True ($cap.EffectiveState -is [string])
+        Assert-True ($cap.AuracastReady -is [bool])
+    }
+
+    It 'accurately detects BT 5.2+ as radio hardware capable of LE Audio' {
+        $modernRadio = Get-TestRadio -Id 'USB\MODERN' -Name 'BT 5.2 Controller' -Lmp 11
+        $cap = Get-BTFixLEAudioCapability -Radios @($modernRadio)
+        Assert-True $cap.RadioSupported 'LMP 11 must be marked RadioSupported'
+        Assert-Equal 11 $cap.RadioLmpVersion
+    }
+
+    It 'identifies legacy radio as hardware limited for LE Audio' {
+        $legacyRadio = Get-TestRadio -Id 'USB\LEGACY' -Name 'BT 4.2 Controller' -Lmp 8
+        $cap = Get-BTFixLEAudioCapability -Radios @($legacyRadio)
+        Assert-False $cap.RadioSupported 'LMP 8 must not be marked RadioSupported'
+        Assert-False $cap.AuracastReady
+    }
+
+    It 'identifies BT 5.3+ as Auracast broadcast capable on supported OS' {
+        $auraRadio = Get-TestRadio -Id 'USB\AURA' -Name 'BT 5.3 Controller' -Lmp 12
+        $cap = Get-BTFixLEAudioCapability -Radios @($auraRadio)
+        Assert-True $cap.RadioSupported
+        if ($cap.IsSupportedOS) {
+            Assert-True $cap.AuracastReady 'BT 5.3+ radio must be Auracast ready on Win 11'
+        }
+    }
+
+    It 'supports -WhatIf on Set-BTFixLEAudioPreference' {
+        $tempDir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-leaudio-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $res = Set-BTFixLEAudioPreference -State 'Enable' -BackupPath $tempDir -WhatIf
+            Assert-True ($null -ne $res)
+        } finally {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'routes CLI LEAudio mode without throwing' {
+        $cli = Join-Path (Split-Path $PSScriptRoot -Parent) 'BTFix.ps1'
+        $threw = $false
+        try {
+            $output = & $cli -Mode LEAudio 6>&1
+        } catch {
+            $threw = $true
+        }
+        Assert-False $threw 'CLI LEAudio mode should execute cleanly without throwing'
+        Assert-True ($output.Length -gt 0)
     }
 }
 
