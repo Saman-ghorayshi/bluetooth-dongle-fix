@@ -3,6 +3,33 @@
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [2.1.0] - 2026-10-31
+
+### Added
+- **Bluetooth LE Audio, LC3 Codec & Auracast Broadcast Manager (`-Mode LEAudio`)**:
+  - Full capability detection across Windows 11 22H2 (build 22621+ unicast LC3) and 24H2 (build 26100+ Auracast).
+  - Inspects Bluetooth Core 5.2+ Isochronous Channels (`LMP >= 11`) and Bluetooth 5.3+ broadcast hardware (`LMP >= 12`).
+  - Manages `HKLM:\SYSTEM\CurrentControlSet\Services\BthAvctpSvc\Parameters\Bats\UserPrefersClassicAudio` policy (`-State Enable`, `-State Disable`, `-State Default`).
+  - Automated JSON rollback snapshots under `%LOCALAPPDATA%\BTFix\leaudio-backups`.
+  - Added native `⚡ LE Audio & LC3` action button in GUI with live log streaming.
+- **Anti-HandsFree Telephony Hi-Fi Enforcer (`-Mode HandsFree`)**:
+  - Permanently isolates virtual Hands-Free Profile (HFP/HSP) telephony nodes while maintaining pristine 44.1/48kHz A2DP stereo playback during voice calls.
+- **Bluetooth LE & Audio Battery Percentage Inspector (`-Mode Battery`)**:
+  - Directly queries `DEVPKEY_Device_BatteryPercentage` across connected GATT and classic audio peripherals.
+  - Visual terminal ASCII battery bars and dynamic color badges in GUI.
+- **High-Bitrate A2DP Codec Optimizer (`-Mode Codec`)**:
+  - Enforces native AAC and aptX codecs and disables erratic AVRCP Absolute Volume jumps.
+- **Esports Low-Latency Controller Mode (`-Mode GameMode`)**:
+  - Automatically identifies PS5 DualSense, Xbox Wireless, and Switch Pro gamepads, disabling USB selective suspend and power throttling for lowest input latency.
+- **Automated Diagnostic Findings Engine**:
+  - Added `leaudio-disabled-by-policy` finding alerting users when LE Audio hardware is suppressed by Windows policy.
+
+### Performance & Reliability
+- **PnP Batch Property Retrieval**: Switched from N individual WMI queries to single-pass batch property queries, speeding up scan times from ~4s to ~350ms.
+- **O(1) Problem Code Dictionary**: Replaced linear pipeline searches with constant-time hashtable lookups.
+- **Non-blocking GUI Self-Test**: Added non-blocking self-test exit for CI headless validation.
+- **Expanded Test Suite**: 76 unit tests with 100% pass rate in Windows PowerShell 5.1 and PS 7+, and 0 PSScriptAnalyzer warnings.
+
 ## [1.2.0] - 2026-10-27
 
 ### Security

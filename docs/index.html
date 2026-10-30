@@ -645,7 +645,7 @@
   <header>
     <div class="container nav-wrap">
       <a href="#" class="logo">
-        <span>🎧</span> BTFix <span class="badge-v">v2.0</span>
+        <span>🎧</span> BTFix <span class="badge-v">v2.1</span>
       </a>
       <nav>
         <a href="#features">Features</a>
@@ -715,6 +715,11 @@
           <div class="feature-icon">🎙️</div>
           <h3>Anti-HandsFree Hi-Fi Enforcer</h3>
           <p>Disables the virtual Hands-Free telephony mic trap so Discord, Zoom, and Teams never degrade audio playback to 8kHz mono.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">⚡</div>
+          <h3>Next-Gen LE Audio &amp; Auracast</h3>
+          <p>Unlocks Windows 11 LC3 codec, Bluetooth Core 5.2+ Isochronous Channels (ISOC), offload driver detection, and multi-stream Auracast broadcast sharing.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">🔋</div>
@@ -1085,6 +1090,11 @@
           <div class="wizard-title">Vanishes After Sleep</div>
           <div class="wizard-sub">Must unplug and replug USB adapter every wake</div>
         </div>
+        <div class="wizard-card" onclick="selectSymptom('leaudio', this)">
+          <div class="wizard-icon">⚡</div>
+          <div class="wizard-title">LE Audio / LC3 Fallback</div>
+          <div class="wizard-sub">Earbuds stuck on legacy SBC; Auracast unavailable</div>
+        </div>
       </div>
 
       <div class="wizard-solution" id="solutionBox">
@@ -1158,6 +1168,16 @@
           </div>
           <div class="faq-answer">
             Standard diagnostic inspections (<code>-Mode Check</code> and <code>-Mode Compare</code>) run without elevation. Mutating hardware state (<code>-Mode Fix</code> or <code>-Mode Rollback</code>) requires administrator rights because Windows PnP device enablement and service restarts are protected OS operations. BTFix prompts for elevation automatically via native Windows UAC.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>How does BTFix unlock Bluetooth LE Audio, LC3, and Auracast on Windows 11?</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            Windows 11 (build 22621+ for unicast LC3, 26100+ for Auracast) introduces next-generation Low Energy Audio. However, Windows frequently defaults to legacy Classic Audio fallback. BTFix inspects your radio controller's LMP version (requiring LMP 11+ / Bluetooth Core 5.2 for Isochronous Channels), detects audio offload drivers, and configures the internal registry switch under <code>HKLM:\SYSTEM\CurrentControlSet\Services\BthAvctpSvc\Parameters\Bats</code> with <code>UserPrefersClassicAudio = 0</code>. Run <code>.\BTFix.ps1 -Mode LEAudio -State Enable</code> or click the ⚡ LE Audio button in the GUI.
           </div>
         </div>
       </div>
@@ -1327,6 +1347,12 @@
         desc: "Windows aggressively powers down external USB dongles into D3 cold state after 3-5 minutes of idle. Many Realtek and CSR dongles fail to wake without physical replugging.",
         cmd: ".\\BTFix.ps1 -Mode Fix -DisableUsbSuspend",
         note: "✓ Configures EnhancedPowerManagementEnabled=0 in the registry for your dongle instance, ensuring 24/7 instant connectivity."
+      },
+      leaudio: {
+        title: "⚡ Bluetooth LE Audio & LC3 Codec Fallback",
+        desc: "Windows 11 supports low-complexity communication codec (LC3) and Auracast broadcasts, but often forces legacy Classic Audio fallback due to hidden registry preferences (UserPrefersClassicAudio=1) or missing offload driver recognition.",
+        cmd: ".\\BTFix.ps1 -Mode LEAudio -State Enable",
+        note: "✓ Evaluates Windows 11 22H2/24H2 builds, verifies Bluetooth 5.2+ ISOC hardware, and configures the BthAvctpSvc LE Audio policy preference."
       }
     };
 
