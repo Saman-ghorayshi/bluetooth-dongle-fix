@@ -759,13 +759,13 @@ Describe 'repair pipeline (mocked)' {
         $holder = [powershell]::Create()
         $null = $holder.AddScript({
             $m = [System.Threading.Mutex]::new($false, 'Local\BTFix-Repair')
-            $null = $m.WaitOne(3000)
-            Start-Sleep -Milliseconds 600
-            $null = $m.ReleaseMutex()
+            $null = $m.WaitOne(5000)
+            Start-Sleep -Milliseconds 2500
+            try { $null = $m.ReleaseMutex() } catch { $null = $_ }
             $m.Dispose()
         })
         $handle = $holder.BeginInvoke()
-        Start-Sleep -Milliseconds 200  # let the holder take the lock first
+        Start-Sleep -Milliseconds 250  # let the holder take the lock first
         try {
             $repair = Invoke-BTFixRepair -BackupPath (Join-Path ([IO.Path]::GetTempPath()) 'btfix-lock-test')
             Assert-True $repair.LockFailed
@@ -773,7 +773,7 @@ Describe 'repair pipeline (mocked)' {
             $rollback = Invoke-BTFixRollback -BackupPath (Join-Path ([IO.Path]::GetTempPath()) 'btfix-lock-test')
             Assert-True $rollback.LockFailed
         } finally {
-            $null = $handle.AsyncWaitHandle.WaitOne(5000)
+            $null = $handle.AsyncWaitHandle.WaitOne(6000)
             $holder.Dispose()
         }
         # the lock is free again: the wrapper proceeds (with the mocked
