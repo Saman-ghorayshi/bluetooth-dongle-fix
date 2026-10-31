@@ -71,7 +71,7 @@ if ($Uninstall) {
     # only way to undo a repair, so deleting them silently would strand any
     # radio BTFix parked. The user can delete the folder manually if they
     # really want everything gone.
-    foreach ($sub in @('bin', 'src', 'BTFix.ps1', 'BTFix-GUI.ps1', 'BTFix-GUI.bat', 'BTFix.bat', 'Run-Fix-As-Admin.bat')) {
+    foreach ($sub in @('bin', 'src', 'BTFix.ps1', 'BTFix-GUI.ps1', 'BTFix-GUI.bat', 'BTFix-Tray.ps1', 'BTFix-Tray.bat', 'BTFix.bat', 'Run-Fix-As-Admin.bat')) {
         $target = Join-Path $InstallDir $sub
         if (Test-Path -LiteralPath $target) {
             Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue
@@ -117,6 +117,8 @@ $filesToDownload = @(
     'BTFix.ps1',
     'BTFix-GUI.ps1',
     'BTFix-GUI.bat',
+    'BTFix-Tray.ps1',
+    'BTFix-Tray.bat',
     'BTFix.bat',
     'Run-Fix-As-Admin.bat',
     'src/BTFix.psd1',
@@ -209,6 +211,9 @@ Set-Content -LiteralPath $btfixCmd -Value "@powershell -NoProfile -ExecutionPoli
 
 $btfixGuiCmd = Join-Path $binDir 'btfix-gui.cmd'
 Set-Content -LiteralPath $btfixGuiCmd -Value "@powershell -NoProfile -ExecutionPolicy Bypass -STA -File `"%~dp0..\BTFix-GUI.ps1`" %*" -Encoding ASCII
+
+$btfixTrayCmd = Join-Path $binDir 'btfix-tray.cmd'
+Set-Content -LiteralPath $btfixTrayCmd -Value "@powershell -WindowStyle Hidden -NoProfile -ExecutionPolicy Bypass -STA -File `"%~dp0..\BTFix-Tray.ps1`" %*" -Encoding ASCII
 
 # Register bin in User PATH
 $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')

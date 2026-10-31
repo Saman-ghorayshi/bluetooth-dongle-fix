@@ -29,12 +29,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Detects concurrent `USBSTOR*` high-bandwidth storage traffic on the controller tree raising the noise floor by 15–20 dB.
   - Emits multi-tier risk evaluations (`Low`, `Medium`, `High`) with actionable physical mitigations (USB 2.0 ports or shielded extension cables >= 1m).
   - Displays dynamic RF badges in GUI (`BTFix-GUI.ps1`) and alerts via diagnostic findings (`usb3-rf-interference-*`).
+- **Windows System Tray Background Sentry Daemon (`BTFix-Tray.ps1` / `-Mode Sentry`)**:
+  - Zero-dependency notification area daemon with native Bluetooth taskbar icon extracted from `fsquirt.exe`.
+  - Continuous PnP hardware sentry detecting when external USB dongles are plugged in and auto-remedying dual-radio (Code 31) conflicts in real-time.
+  - Background peripheral battery tracker with native Windows toast/balloon notifications when peripheral battery drops below 15%.
+  - SuperSpeed USB 3.0 RF interference arrival alert when high-bandwidth storage traffic threatens Bluetooth SNR.
+  - Context menu for instant One-Click Repair, Anti-HandsFree toggle, LE Audio preference switch, and Dashboard launcher.
+  - Added `-Mode Sentry` / `-Mode Tray` CLI command, `BTFix-Tray.bat` hidden runner, and `🛡️ Sentry Tray Mode` button in GUI.
 
 ### Performance & Reliability
 - **PnP Batch Property Retrieval**: Switched from N individual WMI queries to single-pass batch property queries, speeding up scan times from ~4s to ~350ms.
 - **O(1) Problem Code Dictionary**: Replaced linear pipeline searches with constant-time hashtable lookups.
 - **Non-blocking GUI Self-Test**: Added non-blocking self-test exit for CI headless validation.
-- **Expanded Test Suite**: 80 unit tests with 100% pass rate in Windows PowerShell 5.1 and PS 7+, and 0 PSScriptAnalyzer warnings.
+- **Expanded Test Suite**: 82 unit tests with 100% pass rate in Windows PowerShell 5.1 and PS 7+, and 0 PSScriptAnalyzer warnings.
 
 ## [1.2.0] - 2026-10-27
 

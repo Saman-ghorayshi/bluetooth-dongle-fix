@@ -30,7 +30,7 @@ try {
     # Per-file integrity manifest. The key list must stay in sync with
     # $script:BTFixIntegrityFiles in src\BTFix.psm1.
     $codeFiles = @(
-        'BTFix.ps1', 'BTFix-GUI.ps1',
+        'BTFix.ps1', 'BTFix-GUI.ps1', 'BTFix-Tray.ps1',
         'src\BTFix.psm1', 'src\BTFix.psd1', 'src\Chipsets.psm1', 'src\Findings.psm1',
         'src\Health.psm1', 'src\ProblemCodes.psm1', 'src\Superiority.psm1'
     )
@@ -42,7 +42,7 @@ try {
     $hashes | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $manifestPath -Encoding utf8
 
     $payload = @(
-        'BTFix.ps1', 'BTFix-GUI.ps1', 'BTFix-GUI.bat', 'BTFix.bat', 'Run-Fix-As-Admin.bat',
+        'BTFix.ps1', 'BTFix-GUI.ps1', 'BTFix-GUI.bat', 'BTFix-Tray.ps1', 'BTFix-Tray.bat', 'BTFix.bat', 'Run-Fix-As-Admin.bat',
         'install.ps1', 'src', 'file-hashes.json', 'README.md', 'CHANGELOG.md', 'LICENSE'
     )
     if (Test-Path -LiteralPath $zipName) { Remove-Item -LiteralPath $zipName -Force }

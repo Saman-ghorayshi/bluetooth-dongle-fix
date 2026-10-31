@@ -67,7 +67,7 @@ function Get-BTFixStateRoot {
 # installs that have not been elevated yet.
 
 $script:BTFixIntegrityFiles = @(
-    'BTFix.ps1', 'BTFix-GUI.ps1',
+    'BTFix.ps1', 'BTFix-GUI.ps1', 'BTFix-Tray.ps1',
     'src\BTFix.psm1', 'src\BTFix.psd1', 'src\Chipsets.psm1', 'src\Findings.psm1',
     'src\Health.psm1', 'src\ProblemCodes.psm1', 'src\Superiority.psm1'
 )

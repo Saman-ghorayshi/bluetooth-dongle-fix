@@ -968,4 +968,31 @@ Describe 'usb port topology and rf interference' {
     }
 }
 
+Describe 'system tray sentry daemon' {
+    It 'executes BTFix-Tray.ps1 -SelfTest without error' {
+        $tray = Join-Path (Split-Path $PSScriptRoot -Parent) 'BTFix-Tray.ps1'
+        $threw = $false
+        $output = ''
+        try {
+            $output = & powershell.exe -NoProfile -ExecutionPolicy Bypass -STA -File $tray -SelfTest 2>&1
+        } catch {
+            $threw = $true
+        }
+        Assert-False $threw 'BTFix-Tray.ps1 -SelfTest should execute cleanly'
+        Assert-True ($output -like '*SELFTEST OK tray initialized*')
+    }
+
+    It 'routes CLI Tray and Sentry modes without throwing' {
+        $cli = Join-Path (Split-Path $PSScriptRoot -Parent) 'BTFix.ps1'
+        $threw = $false
+        try {
+            $output = & $cli -Mode Sentry -WhatIf 6>&1
+        } catch {
+            $threw = $true
+        }
+        Assert-False $threw 'CLI Sentry mode should execute cleanly without throwing'
+        Assert-True ($output -like '*BTFix Sentry is now active*')
+    }
+}
+
 Write-Summary

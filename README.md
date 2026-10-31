@@ -118,6 +118,14 @@ BTFix includes a native Fluent dark-mode graphical user interface built on Windo
 * **The Fix**: BTFix traverses the PnP device hierarchy (`DEVPKEY_Device_Parent`) to map host controllers (xHCI/EHCI), root hubs (`ROOT_HUB30` vs `ROOT_HUB20`), and intermediate USB tiers. It queries concurrent `USBSTOR*` storage devices sharing the controller, calculates interference risk levels (`Low`, `Medium`, `High`), and provides actionable physical mitigations (move to a black USB 2.0 port or use a shielded USB extension cable &ge; 1 meter).
 * **CLI**: `.\BTFix.ps1 -Mode Topology`
 
+### 7. 🛡️ System Tray Sentry Background Daemon (`-Mode Sentry` / `BTFix-Tray.bat`)
+* **The Problem**: Bluetooth issues occur dynamically while you work or game: plugging in a dongle creates a Code 31 collision, a peripheral battery dies silently without warning, or high USB 3.0 RF interference degrades audio quality.
+* **The Fix**: BTFix includes a zero-dependency background daemon that sits in your Windows notification area (System Tray). It continuously watches for PnP hardware arrival events to auto-resolve dual-radio conflicts in real-time, monitors GATT peripheral battery percentages with notifications when charge drops below 15%, and provides quick right-click actions for One-Click Repair, Hands-Free isolation, and LE Audio.
+* **Launch**:
+  * Double-click `BTFix-Tray.bat` (hidden background mode).
+  * Or from PowerShell: `.\BTFix.ps1 -Mode Sentry`.
+  * Or click **"🛡️ Sentry Tray Mode"** inside the GUI dashboard.
+
 ---
 
 ## 💡 The Real Cause: Why Windows Breaks Your Dongle
@@ -239,7 +247,7 @@ BTFix offers a full-featured CLI for power users, sysadmins, and automation scri
 
 | Option | Type | Description |
 | :--- | :--- | :--- |
-| `-Mode` | String | `Check` (default), `Compare`, `Fix`, `Rollback`, `Forget`, `Chipsets`, `Report`, `HandsFree`, `Battery`, `Codec`, `GameMode`, `LEAudio`, `Topology` |
+| `-Mode` | String | `Check` (default), `Compare`, `Fix`, `Rollback`, `Forget`, `Chipsets`, `Report`, `HandsFree`, `Battery`, `Codec`, `GameMode`, `LEAudio`, `Topology`, `Sentry`, `Tray` |
 | `-State` | String | `Status` (default), `Enable`, `Disable`, `Off`, `On`, `Default` (for HandsFree, Codec, GameMode, LEAudio) |
 | `-Radio <id>` | String | Explicitly select target radio by PnP Instance ID |
 | `-Device <name>` | String | Filter paired peripheral or telephony endpoint by name |
@@ -291,8 +299,9 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
 == gaming controller latency  [2 PASS]
 == bluetooth le audio and auracast stack [6 PASS]
 == usb port topology and rf interference [4 PASS]
+== system tray sentry daemon     [2 PASS]
 ------------------------------------------------------------
-passed: 80   failed: 0
+passed: 82   failed: 0
 ```
 
 ---

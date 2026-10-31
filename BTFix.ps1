@@ -37,7 +37,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
     Justification = 'BTFix is a console tool: coloured progress output belongs on the host, not in the pipeline.')]
 param(
-    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare', 'HandsFree', 'Battery', 'Codec', 'GameMode', 'LEAudio', 'Topology', 'UsbTopology')]
+    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare', 'HandsFree', 'Battery', 'Codec', 'GameMode', 'LEAudio', 'Topology', 'UsbTopology', 'Tray', 'Sentry', 'Watch')]
     [string]$Mode = 'Check',
 
     # State for configurable modes (HandsFree, Codec, GameMode, LEAudio)
@@ -132,7 +132,7 @@ function Invoke-SelfElevated {
     }
 }
 
-$effectiveMode = switch ($Mode) { 'Diagnose' { 'Check' } 'Repair' { 'Fix' } 'UsbTopology' { 'Topology' } default { $Mode } }
+$effectiveMode = switch ($Mode) { 'Diagnose' { 'Check' } 'Repair' { 'Fix' } 'UsbTopology' { 'Topology' } 'Sentry' { 'Tray' } 'Watch' { 'Tray' } default { $Mode } }
 $effectiveState = switch ($State) { 'Off' { 'Disable' } 'On' { 'Enable' } default { $State } }
 $needsAdmin = ($effectiveMode -in @('Fix', 'Rollback', 'Forget')) -or ($effectiveMode -in @('HandsFree', 'Codec', 'GameMode') -and $effectiveState -ne 'Status')
 if ($needsAdmin -and -not (Test-BTFixAdministrator)) {
@@ -492,6 +492,18 @@ switch ($effectiveMode) {
                 Write-Host ("  Recommendation  : {0}" -f $top.Recommendation) -ForegroundColor $(if ($top.RfRisk -ne 'Low') { 'Yellow' } else { 'Green' })
             }
         }
+    }
+
+    'Tray' {
+        Write-Host ''
+        Write-Host 'Launching BTFix Sentry in System Tray...' -ForegroundColor Cyan
+        $trayScript = Join-Path $PSScriptRoot 'BTFix-Tray.ps1'
+        if (-not (Test-Path -LiteralPath $trayScript)) {
+            Write-Host "Error: '$trayScript' not found." -ForegroundColor Red
+            exit 1
+        }
+        Start-Process powershell.exe -ArgumentList @('-WindowStyle', 'Hidden', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', "`"$trayScript`"")
+        Write-Host 'BTFix Sentry is now active in your Windows notification area (System Tray).' -ForegroundColor Green
     }
 
     'Chipsets' {

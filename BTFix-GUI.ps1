@@ -235,7 +235,8 @@ if ($integrity.BaselineSource -eq 'none' -and (Test-BTFixAdministrator)) {
                 <Button x:Name="BtnScan" Content="🔍 Scan &amp; Benchmark" Margin="0,0,8,0" ToolTip="Refreshes hardware inventory and recalculates superiority scores."/>
                 <Button x:Name="BtnRestartAudio" Content="🎧 Fix Audio Drops" Margin="0,0,8,0" ToolTip="Restarts BTAGService and Windows AudioEndpointBuilder to re-route audio to earbuds without rebooting."/>
                 <Button x:Name="BtnRollback" Content="🔄 Rollback" Margin="0,0,8,0" ToolTip="Restores hardware state from the latest backup snapshot."/>
-                <Button x:Name="BtnExport" Content="📋 Export Report" Margin="0,0,16,0" ToolTip="Generates a full Markdown &amp; JSON diagnostics bundle."/>
+                <Button x:Name="BtnExport" Content="📋 Export Report" Margin="0,0,8,0" ToolTip="Generates a full Markdown &amp; JSON diagnostics bundle."/>
+                <Button x:Name="BtnTraySentry" Content="🛡️ Sentry Tray Mode" Margin="0,0,16,0" ToolTip="Runs BTFix Sentry in the Windows notification area to automatically auto-resolve conflicts and monitor battery in the background."/>
                 
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,4,0,0">
                     <CheckBox x:Name="ChkPreferInternal" Content="Prefer Internal Adapter" Foreground="#C9D1D9" Margin="0,0,12,0" VerticalAlignment="Center" ToolTip="Forces priority to internal motherboard radio instead of external USB dongle."/>
@@ -290,6 +291,7 @@ $btnScan              = $window.FindName('BtnScan')
 $btnRestartAudio      = $window.FindName('BtnRestartAudio')
 $btnRollback          = $window.FindName('BtnRollback')
 $btnExport            = $window.FindName('BtnExport')
+$btnTraySentry        = $window.FindName('BtnTraySentry')
 $chkPreferInternal    = $window.FindName('ChkPreferInternal')
 $chkDisableUsbSuspend = $window.FindName('ChkDisableUsbSuspend')
 $txtConsole           = $window.FindName('TxtConsole')
@@ -884,6 +886,19 @@ $btnExport.Add_Click({
         Write-GuiLog 'ERROR' "Failed to export report: $($_.Exception.Message)"
     }
 })
+
+if ($btnTraySentry) {
+    $btnTraySentry.Add_Click({
+        $trayScript = Join-Path $scriptRoot 'BTFix-Tray.ps1'
+        if (Test-Path -LiteralPath $trayScript) {
+            Write-GuiLog 'ACTION' 'Starting BTFix Sentry in Windows System Tray...'
+            Start-Process powershell.exe -ArgumentList @('-WindowStyle', 'Hidden', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', "`"$trayScript`"")
+            Write-GuiLog 'OK' 'BTFix Sentry is now active in your notification area.'
+        } else {
+            Write-GuiLog 'ERROR' "BTFix-Tray.ps1 not found at: $trayScript"
+        }
+    })
+}
 
 # Initialize UI
 Show-ElevationBadge
