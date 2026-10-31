@@ -756,16 +756,21 @@ Describe 'repair pipeline (mocked)' {
         Reset-PipelineMock
         # Mutexes are re-entrant on the owning THREAD, so the holder must be
         # a different thread - a runspace - not this one.
+        $lockReady = New-Object System.Threading.EventWaitHandle($false, [System.Threading.EventResetMode]::ManualReset, 'Local\BTFix-LockReady')
         $holder = [powershell]::Create()
         $null = $holder.AddScript({
-            $m = [System.Threading.Mutex]::new($false, 'Local\BTFix-Repair')
-            $null = $m.WaitOne(5000)
+            $ready = [System.Threading.EventWaitHandle]::OpenExisting('Local\BTFix-LockReady')
+            $m = New-Object System.Threading.Mutex($false, 'Local\BTFix-Repair')
+            if ($m.WaitOne(5000)) {
+                $null = $ready.Set()
             Start-Sleep -Milliseconds 2500
             try { $null = $m.ReleaseMutex() } catch { $null = $_ }
+            }
             $m.Dispose()
+            $ready.Dispose()
         })
         $handle = $holder.BeginInvoke()
-        Start-Sleep -Milliseconds 250  # let the holder take the lock first
+        $null = $lockReady.WaitOne(5000)  # wait until holder has acquired mutex
         try {
             $repair = Invoke-BTFixRepair -BackupPath (Join-Path ([IO.Path]::GetTempPath()) 'btfix-lock-test')
             Assert-True $repair.LockFailed
@@ -775,6 +780,7 @@ Describe 'repair pipeline (mocked)' {
         } finally {
             $null = $handle.AsyncWaitHandle.WaitOne(6000)
             $holder.Dispose()
+            $lockReady.Dispose()
         }
         # the lock is free again: the wrapper proceeds (with the mocked
         # pipeline still installed, nothing mutates)
