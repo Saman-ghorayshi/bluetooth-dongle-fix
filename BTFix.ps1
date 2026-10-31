@@ -37,7 +37,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
     Justification = 'BTFix is a console tool: coloured progress output belongs on the host, not in the pipeline.')]
 param(
-    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare', 'HandsFree', 'Battery', 'Codec', 'GameMode', 'LEAudio')]
+    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare', 'HandsFree', 'Battery', 'Codec', 'GameMode', 'LEAudio', 'Topology', 'UsbTopology')]
     [string]$Mode = 'Check',
 
     # State for configurable modes (HandsFree, Codec, GameMode, LEAudio)
@@ -132,7 +132,7 @@ function Invoke-SelfElevated {
     }
 }
 
-$effectiveMode = switch ($Mode) { 'Diagnose' { 'Check' } 'Repair' { 'Fix' } default { $Mode } }
+$effectiveMode = switch ($Mode) { 'Diagnose' { 'Check' } 'Repair' { 'Fix' } 'UsbTopology' { 'Topology' } default { $Mode } }
 $effectiveState = switch ($State) { 'Off' { 'Disable' } 'On' { 'Enable' } default { $State } }
 $needsAdmin = ($effectiveMode -in @('Fix', 'Rollback', 'Forget')) -or ($effectiveMode -in @('HandsFree', 'Codec', 'GameMode') -and $effectiveState -ne 'Status')
 if ($needsAdmin -and -not (Test-BTFixAdministrator)) {
@@ -219,6 +219,15 @@ switch ($effectiveMode) {
                 'Hardware Limited (Requires BT 5.2+ radio)'
             }
             Write-Host ("  Bluetooth LE Audio     : {0} (run -Mode LEAudio for stack details)" -f $leStatusText) -ForegroundColor DarkCyan
+        }
+
+        # USB 3.0 / SuperSpeed RF Topology Check for External Dongles
+        $topologies = @(Get-BTFixUsbTopology -Radios $radios | Where-Object { $_.IsUsbDongle })
+        if ($topologies.Count -gt 0) {
+            foreach ($top in $topologies) {
+                $rfColor = switch ($top.RfRisk) { 'High' { 'Red' } 'Medium' { 'Yellow' } default { 'Green' } }
+                Write-Host ("  USB Port Topology      : {0} [{1} RF Risk] (run -Mode Topology for tree map)" -f $top.PortType, $top.RfRisk) -ForegroundColor $rfColor
+            }
         }
 
         # Paired Peripherals & Battery status
@@ -457,6 +466,31 @@ switch ($effectiveMode) {
             Write-Host '  .\BTFix.ps1 -Mode LEAudio -State Enable' -ForegroundColor Cyan
             Write-Host 'To force legacy Classic Audio fallback:' -ForegroundColor DarkGray
             Write-Host '  .\BTFix.ps1 -Mode LEAudio -State Disable' -ForegroundColor Cyan
+        }
+    }
+
+    'Topology' {
+        Write-Host ''
+        Write-Host 'USB Port Topology & RF Interference Inspector' -ForegroundColor Cyan
+        Write-Host '---------------------------------------------' -ForegroundColor Cyan
+        $radios = @(Get-BTFixRadio)
+        $topologies = @(Get-BTFixUsbTopology -Radios $radios)
+        if ($topologies.Count -eq 0) {
+            Write-Host '  (no USB Bluetooth dongles detected)' -ForegroundColor Yellow
+        } else {
+            foreach ($top in $topologies) {
+                $rfColor = switch ($top.RfRisk) { 'High' { 'Red' } 'Medium' { 'Yellow' } default { 'Green' } }
+                Write-Host ''
+                Write-Host ("  Dongle Radio    : {0}" -f $top.RadioName) -ForegroundColor White
+                Write-Host ("  Instance ID     : {0}" -f $top.InstanceId) -ForegroundColor DarkGray
+                Write-Host ("  Port Type       : {0}" -f $top.PortType) -ForegroundColor White
+                Write-Host ("  Root Hub        : {0}" -f $(if ($top.RootHubId) { $top.RootHubId } else { 'Direct / Unknown' })) -ForegroundColor DarkGray
+                Write-Host ("  Host Controller : {0}" -f $(if ($top.HostControllerId) { $top.HostControllerId } else { 'Standard Host Controller' })) -ForegroundColor DarkGray
+                Write-Host ("  Adjacent Storage: {0}" -f $(if ($top.HasStorageTraffic) { 'Active USB Storage Device(s) Detected' } else { 'None' })) -ForegroundColor $(if ($top.HasStorageTraffic) { 'Red' } else { 'DarkGray' })
+                Write-Host ("  RF Interference : [{0} Risk]" -f $top.RfRisk) -ForegroundColor $rfColor
+                Write-Host ("  Diagnosis       : {0}" -f $top.Details) -ForegroundColor Gray
+                Write-Host ("  Recommendation  : {0}" -f $top.Recommendation) -ForegroundColor $(if ($top.RfRisk -ne 'Low') { 'Yellow' } else { 'Green' })
+            }
         }
     }
 

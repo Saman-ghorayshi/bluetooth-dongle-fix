@@ -112,6 +112,12 @@ BTFix includes a native Fluent dark-mode graphical user interface built on Windo
   * Force Classic Audio fallback: `.\BTFix.ps1 -Mode LEAudio -State Disable`
   * Restore Windows default preference: `.\BTFix.ps1 -Mode LEAudio -State Default`
 
+### 6. 📡 USB 3.0 RF Interference & Port Topology Inspector (`-Mode Topology`)
+* **The Problem**: Bluetooth audio stutters, drops packets, or wireless range collapses to less than 1 meter when moving away from the PC or when USB flash drives / external SSDs transfer files.
+* **The Cause**: USB 3.0/3.1 SuperSpeed (5 Gbps) uses spread-spectrum clocking that directly emits broad-spectrum harmonic radiation into the 2.4 GHz to 2.5 GHz ISM band (2402–2480 MHz), elevating the RF noise floor by up to 20 dB (Intel White Paper #327216-001).
+* **The Fix**: BTFix traverses the PnP device hierarchy (`DEVPKEY_Device_Parent`) to map host controllers (xHCI/EHCI), root hubs (`ROOT_HUB30` vs `ROOT_HUB20`), and intermediate USB tiers. It queries concurrent `USBSTOR*` storage devices sharing the controller, calculates interference risk levels (`Low`, `Medium`, `High`), and provides actionable physical mitigations (move to a black USB 2.0 port or use a shielded USB extension cable &ge; 1 meter).
+* **CLI**: `.\BTFix.ps1 -Mode Topology`
+
 ---
 
 ## 💡 The Real Cause: Why Windows Breaks Your Dongle
@@ -233,8 +239,8 @@ BTFix offers a full-featured CLI for power users, sysadmins, and automation scri
 
 | Option | Type | Description |
 | :--- | :--- | :--- |
-| `-Mode` | String | `Check` (default), `Compare`, `Fix`, `Rollback`, `Forget`, `Chipsets`, `Report`, `HandsFree`, `Battery`, `Codec`, `GameMode` |
-| `-State` | String | `Status` (default), `Enable`, `Disable`, `Off`, `On` (for HandsFree, Codec, GameMode) |
+| `-Mode` | String | `Check` (default), `Compare`, `Fix`, `Rollback`, `Forget`, `Chipsets`, `Report`, `HandsFree`, `Battery`, `Codec`, `GameMode`, `LEAudio`, `Topology` |
+| `-State` | String | `Status` (default), `Enable`, `Disable`, `Off`, `On`, `Default` (for HandsFree, Codec, GameMode, LEAudio) |
 | `-Radio <id>` | String | Explicitly select target radio by PnP Instance ID |
 | `-Device <name>` | String | Filter paired peripheral or telephony endpoint by name |
 | `-ToggleService` | Switch | Also stop/disable `BTAGService` when disabling HandsFree telephony |
@@ -283,8 +289,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
 == battery telemetry          [1 PASS]
 == audio codec optimizer      [2 PASS]
 == gaming controller latency  [2 PASS]
+== bluetooth le audio and auracast stack [6 PASS]
+== usb port topology and rf interference [4 PASS]
 ------------------------------------------------------------
-passed: 70   failed: 0
+passed: 80   failed: 0
 ```
 
 ---

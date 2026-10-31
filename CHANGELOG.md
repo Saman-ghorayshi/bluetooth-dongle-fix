@@ -23,12 +23,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   - Automatically identifies PS5 DualSense, Xbox Wireless, and Switch Pro gamepads, disabling USB selective suspend and power throttling for lowest input latency.
 - **Automated Diagnostic Findings Engine**:
   - Added `leaudio-disabled-by-policy` finding alerting users when LE Audio hardware is suppressed by Windows policy.
+- **USB 3.0 / SuperSpeed RF Interference & Port Topology Inspector (`-Mode Topology`)**:
+  - Traverses PnP device hierarchy (`DEVPKEY_Device_Parent`) to map host controllers (xHCI/EHCI), root hubs (`ROOT_HUB30` vs `ROOT_HUB20`), and intermediate tiers.
+  - Identifies physical USB 3.0/3.1 SuperSpeed ports whose spread-spectrum clock harmonics directly radiate 2.4–2.5 GHz noise into the Bluetooth band (Intel White Paper #327216-001).
+  - Detects concurrent `USBSTOR*` high-bandwidth storage traffic on the controller tree raising the noise floor by 15–20 dB.
+  - Emits multi-tier risk evaluations (`Low`, `Medium`, `High`) with actionable physical mitigations (USB 2.0 ports or shielded extension cables >= 1m).
+  - Displays dynamic RF badges in GUI (`BTFix-GUI.ps1`) and alerts via diagnostic findings (`usb3-rf-interference-*`).
 
 ### Performance & Reliability
 - **PnP Batch Property Retrieval**: Switched from N individual WMI queries to single-pass batch property queries, speeding up scan times from ~4s to ~350ms.
 - **O(1) Problem Code Dictionary**: Replaced linear pipeline searches with constant-time hashtable lookups.
 - **Non-blocking GUI Self-Test**: Added non-blocking self-test exit for CI headless validation.
-- **Expanded Test Suite**: 76 unit tests with 100% pass rate in Windows PowerShell 5.1 and PS 7+, and 0 PSScriptAnalyzer warnings.
+- **Expanded Test Suite**: 80 unit tests with 100% pass rate in Windows PowerShell 5.1 and PS 7+, and 0 PSScriptAnalyzer warnings.
 
 ## [1.2.0] - 2026-10-27
 

@@ -512,6 +512,35 @@ function Show-HardwareState {
             }
         }
 
+        # Badge 5: USB RF Interference & Topology (for external USB dongles)
+        if (-not $r.IsInternal -and (Get-Command 'Get-BTFixUsbTopology' -ErrorAction SilentlyContinue)) {
+            $topObj = @(Get-BTFixUsbTopology -Radios @($r))[0]
+            if ($topObj) {
+                $bTop = New-Object System.Windows.Controls.Border
+                $bTop.CornerRadius = New-Object System.Windows.CornerRadius(4)
+                $bTop.Padding = New-Object System.Windows.Thickness(6, 2, 6, 2)
+                $bTop.Margin = New-Object System.Windows.Thickness(0, 0, 6, 4)
+                $tbTop = New-Object System.Windows.Controls.TextBlock
+                $tbTop.FontSize = 11
+                if ($topObj.RfRisk -eq 'High') {
+                    $bTop.Background = $brushConv.ConvertFromString('#361214')
+                    $tbTop.Text = '🔴 USB 3.0 (High RF Noise)'
+                    $tbTop.Foreground = $brushConv.ConvertFromString('#F85149')
+                } elseif ($topObj.RfRisk -eq 'Medium') {
+                    $bTop.Background = $brushConv.ConvertFromString('#2D2200')
+                    $tbTop.Text = '🟡 USB 3.0 (RF Advisory)'
+                    $tbTop.Foreground = $brushConv.ConvertFromString('#D29922')
+                } else {
+                    $bTop.Background = $brushConv.ConvertFromString('#12261E')
+                    $tbTop.Text = '🟢 USB 2.0 (Clean RF)'
+                    $tbTop.Foreground = $brushConv.ConvertFromString('#3FB950')
+                }
+                $bTop.ToolTip = "$($topObj.PortType)`n$($topObj.Details)`nRecommendation: $($topObj.Recommendation)"
+                $bTop.Child = $tbTop
+                $null = $wp.Children.Add($bTop)
+            }
+        }
+
         $null = $sp.Children.Add($wp)
         $border.Child = $sp
         $null = $panelRadios.Children.Add($border)

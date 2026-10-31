@@ -722,6 +722,11 @@
           <p>Unlocks Windows 11 LC3 codec, Bluetooth Core 5.2+ Isochronous Channels (ISOC), offload driver detection, and multi-stream Auracast broadcast sharing.</p>
         </div>
         <div class="feature-card">
+          <div class="feature-icon">📡</div>
+          <h3>USB 3.0 RF Noise &amp; Topology</h3>
+          <p>Maps USB host controllers (xHCI/EHCI) and root hubs to detect 2.4&ndash;2.5 GHz spread-spectrum harmonic RF interference caused by SuperSpeed ports and external storage drives.</p>
+        </div>
+        <div class="feature-card">
           <div class="feature-icon">🔋</div>
           <h3>Real-Time Battery Telemetry</h3>
           <p>Reads GATT battery descriptors and DEVPKEY_Device_BatteryPercentage for AirPods, Galaxy Buds, Sony WH-1000XM, and gamepads.</p>
@@ -1095,6 +1100,11 @@
           <div class="wizard-title">LE Audio / LC3 Fallback</div>
           <div class="wizard-sub">Earbuds stuck on legacy SBC; Auracast unavailable</div>
         </div>
+        <div class="wizard-card" onclick="selectSymptom('topology', this)">
+          <div class="wizard-icon">📡</div>
+          <div class="wizard-title">USB 3.0 RF Stutter</div>
+          <div class="wizard-sub">Audio drops near USB 3.0 ports or external storage</div>
+        </div>
       </div>
 
       <div class="wizard-solution" id="solutionBox">
@@ -1178,6 +1188,16 @@
           </div>
           <div class="faq-answer">
             Windows 11 (build 22621+ for unicast LC3, 26100+ for Auracast) introduces next-generation Low Energy Audio. However, Windows frequently defaults to legacy Classic Audio fallback. BTFix inspects your radio controller's LMP version (requiring LMP 11+ / Bluetooth Core 5.2 for Isochronous Channels), detects audio offload drivers, and configures the internal registry switch under <code>HKLM:\SYSTEM\CurrentControlSet\Services\BthAvctpSvc\Parameters\Bats</code> with <code>UserPrefersClassicAudio = 0</code>. Run <code>.\BTFix.ps1 -Mode LEAudio -State Enable</code> or click the ⚡ LE Audio button in the GUI.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Why does plugging a Bluetooth dongle into a USB 3.0 port cause audio stutters and dropouts?</span>
+            <span class="faq-toggle">+</span>
+          </div>
+          <div class="faq-answer">
+            USB 3.0/3.1 SuperSpeed operates at 5 Gbps with a clock frequency of 2.5 GHz. As documented in Intel White Paper #327216-001, the spread-spectrum electrical signaling across unshielded USB 3.0 connectors and cables radiates high-frequency harmonic noise directly into the 2.4 GHz to 2.5 GHz ISM band used by Bluetooth and Wi-Fi. This elevates the ambient RF noise floor by 15&ndash;20 dB, causing packet dropouts and range collapse. BTFix detects this port topology via <code>-Mode Topology</code> and guides you to use an isolated USB 2.0 port or a shielded USB extension cable (&ge; 1 meter).
           </div>
         </div>
       </div>
@@ -1353,6 +1373,12 @@
         desc: "Windows 11 supports low-complexity communication codec (LC3) and Auracast broadcasts, but often forces legacy Classic Audio fallback due to hidden registry preferences (UserPrefersClassicAudio=1) or missing offload driver recognition.",
         cmd: ".\\BTFix.ps1 -Mode LEAudio -State Enable",
         note: "✓ Evaluates Windows 11 22H2/24H2 builds, verifies Bluetooth 5.2+ ISOC hardware, and configures the BthAvctpSvc LE Audio policy preference."
+      },
+      topology: {
+        title: "📡 USB 3.0 SuperSpeed 2.4GHz RF Interference",
+        desc: "USB 3.0/3.1 SuperSpeed (5 Gbps) uses spread-spectrum data transmission that emits direct harmonic radiation across 2.4-2.5 GHz. Direct port proximity or concurrent USB storage traffic elevates the RF noise floor by up to 20 dB, reducing range from 10m to <1m.",
+        cmd: ".\\BTFix.ps1 -Mode Topology",
+        note: "✓ Traverses the PnP device tree, analyzes root hub tiers (ROOT_HUB30), flags active USB storage traffic, and provides actionable mitigation advice."
       }
     };
 

@@ -294,6 +294,34 @@ function Get-BTFixFinding {
         }
     }
 
+    # --- USB 3.0 RF Interference Advisory -------------------------------
+    if (-not $NoLive -and (Get-Command 'Get-BTFixUsbTopology' -ErrorAction SilentlyContinue)) {
+        $topologies = @(Get-BTFixUsbTopology -Radios $radios | Where-Object { $_.IsUsbDongle })
+        foreach ($top in $topologies) {
+            if ($top.RfRisk -eq 'High') {
+                $findings += [pscustomobject]@{
+                    Id          = "usb3-rf-interference-$($top.InstanceId)"
+                    Severity    = 'Medium'
+                    Title       = "High USB 3.0 RF interference risk on $($top.RadioName)"
+                    Detail      = "The dongle is on a USB 3.0 controller alongside active USB storage devices. Radiated 2.4-2.5 GHz noise elevates the RF noise floor by 15-20 dB, causing packet dropouts and range loss."
+                    Fix         = "Move the dongle to a black USB 2.0 port or use a shielded USB extension cable (>= 1 meter)."
+                    AutoFixable = $false
+                    Data        = @{ UsbTopology = $top }
+                }
+            } elseif ($top.RfRisk -eq 'Medium') {
+                $findings += [pscustomobject]@{
+                    Id          = "usb3-rf-interference-$($top.InstanceId)"
+                    Severity    = 'Info'
+                    Title       = "Bluetooth dongle is in an unshielded USB 3.0 port ($($top.RadioName))"
+                    Detail      = "Dongle is plugged into $($top.PortType). USB 3.0 data clocks radiate broad-spectrum harmonics into the 2.4 GHz Bluetooth band, which can cause audio stutters."
+                    Fix         = "For maximum wireless range and zero audio drops, prefer a USB 2.0 port or a shielded USB extension cable."
+                    AutoFixable = $false
+                    Data        = @{ UsbTopology = $top }
+                }
+            }
+        }
+    }
+
     $order = @{ High = 0; Medium = 1; Low = 2; Info = 3 }
     return @($findings | Sort-Object -Property @{ Expression = { $order[$_.Severity] } }, Title)
 }

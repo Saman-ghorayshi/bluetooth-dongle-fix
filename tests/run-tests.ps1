@@ -1,4 +1,4 @@
-# BTFix test suite.
+﻿# BTFix test suite.
 #
 #   powershell -NoProfile -ExecutionPolicy Bypass -File tests\run-tests.ps1
 #
@@ -906,6 +906,65 @@ Describe 'bluetooth le audio and auracast stack' {
         }
         Assert-False $threw 'CLI LEAudio mode should execute cleanly without throwing'
         Assert-True ($output.Length -gt 0)
+    }
+}
+
+Describe 'usb port topology and rf interference' {
+    It 'evaluates USB 3.0 external dongle as Medium or High RF risk' {
+        $usb3Radio = Get-TestRadio -Id 'USB\VID_0BDA&PID_8771\00E04C000001' -Name 'Realtek USB 3.0 Dongle'
+        $top = @(Get-BTFixUsbTopology -Radios @($usb3Radio))[0]
+        Assert-True ($null -ne $top)
+        Assert-True $top.IsUsbDongle
+        Assert-True ($top.PortType -like '*USB 3.0*')
+        Assert-True ($top.RfRisk -in @('Medium', 'High'))
+        Assert-True ($top.Recommendation.Length -gt 0)
+    }
+
+    It 'evaluates USB 2.0 external dongle as Low RF risk' {
+        $usb2Radio = [pscustomobject]@{
+            InstanceId     = 'USB\VID_0A12&PID_0001\5&5E7D000&0&1'
+            FriendlyName   = 'CSR USB 2.0 Dongle'
+            Status         = 'OK'
+            ProblemCode    = 0
+            ProblemStatus  = $null
+            DriverVersion  = '10.0.26100.9711'
+            DriverProvider = 'Microsoft'
+            HardwareIds    = @('USB\VID_0A12&PID_0001')
+            LocationInfo   = 'Port_#0001.Hub_#0002'
+            Parent         = 'USB\ROOT_HUB20\4&84aac64&0&0'
+            IsInternal     = $false
+            IsHealthy      = $true
+            IsDisabled     = $false
+            LmpVersion     = 6
+        }
+        $top = @(Get-BTFixUsbTopology -Radios @($usb2Radio))[0]
+        Assert-True ($null -ne $top)
+        Assert-True $top.IsUsbDongle
+        Assert-True ($top.PortType -like '*USB 2.0*')
+        Assert-Equal 'Low' $top.RfRisk
+    }
+
+    It 'evaluates internal motherboard radio as None RF risk' {
+        $internalRadio = Get-TestRadio -Id 'PCI\VEN_8086&DEV_06F0' -Name 'Intel AX201' -Internal $true
+        $top = @(Get-BTFixUsbTopology -Radios @($internalRadio))[0]
+        Assert-True ($null -ne $top)
+        Assert-False $top.IsUsbDongle
+        Assert-Equal 'Internal / Non-USB' $top.PortType
+        Assert-Equal 'None' $top.RfRisk
+    }
+
+    It 'routes CLI Topology and UsbTopology modes without throwing' {
+        $cli = Join-Path (Split-Path $PSScriptRoot -Parent) 'BTFix.ps1'
+        $threw = $false
+        try {
+            $output1 = & $cli -Mode Topology 6>&1
+            $output2 = & $cli -Mode UsbTopology 6>&1
+        } catch {
+            $threw = $true
+        }
+        Assert-False $threw 'CLI Topology modes should execute cleanly without throwing'
+        Assert-True ($output1.Length -gt 0)
+        Assert-True ($output2.Length -gt 0)
     }
 }
 

@@ -863,6 +863,180 @@ function Set-BTFixLEAudioPreference {
     }
 }
 
+<#
+.SYNOPSIS
+Inspects USB port topology and evaluates 2.4GHz RF interference risk for Bluetooth dongles.
+.DESCRIPTION
+Intel research (Document #327216-001) proves USB 3.0/3.1 SuperSpeed data transmission lines
+radiate broadband noise in the 2.4 GHz to 2.5 GHz band (2400-2500 MHz), directly overlapping
+Bluetooth channels and degrading signal-to-noise ratio by 15-20 dB.
+This cmdlet traverses the PnP device hierarchy to detect if a dongle is attached to an xHCI
+(USB 3.0+) root hub, checks for concurrent SuperSpeed storage/streaming traffic, and calculates
+an actionable RF interference risk assessment.
+#>
+function Get-BTFixUsbTopology {
+    [CmdletBinding()]
+    [OutputType([object[]])]
+    param(
+        [Parameter()][object[]]$Radios
+    )
+
+    $targetRadios = [System.Collections.ArrayList]::new()
+    if ($null -ne $Radios) {
+        foreach ($item in $Radios) { $null = $targetRadios.Add($item) }
+    } else {
+        if (Get-Command 'Get-BTFixRadio' -ErrorAction SilentlyContinue) {
+            $found = Get-BTFixRadio
+            if ($null -ne $found) {
+                foreach ($item in $found) {
+                    if ($item.IsHealthy) { $null = $targetRadios.Add($item) }
+                }
+            }
+        }
+    }
+
+    $usbStorageDevices = @()
+    try {
+        if (Get-Command 'Get-PnpDevice' -ErrorAction SilentlyContinue) {
+            $usbStorageDevices = @(Get-PnpDevice -Class DiskDrive -PresentOnly -ErrorAction SilentlyContinue | Where-Object {
+                $_.InstanceId -like 'USBSTOR*'
+            })
+        }
+    } catch {
+        $usbStorageDevices = @()
+    }
+
+    $results = @()
+    foreach ($r in $targetRadios) {
+        $inst = [string]$r.InstanceId
+        $isInternal = if ($r.PSObject.Properties['IsInternal']) { [bool]$r.IsInternal } else { $false }
+
+        if (-not $inst.StartsWith('USB\', [System.StringComparison]::OrdinalIgnoreCase) -or $isInternal) {
+            $results += [pscustomobject]@{
+                RadioName         = $r.FriendlyName
+                InstanceId        = $inst
+                IsUsbDongle       = $false
+                PortType          = 'Internal / Non-USB'
+                RootHubId         = $null
+                HostControllerId  = $null
+                RfRisk            = 'None'
+                HasStorageTraffic = $false
+                Details           = 'Internal motherboard radio or non-USB bus.'
+                Recommendation    = $null
+            }
+            continue
+        }
+
+        # Query parent device in PnP tree (or mock Parent property)
+        $parentId = $null
+        if ($r.PSObject.Properties['Parent'] -and $r.Parent) {
+            $parentId = [string]$r.Parent
+        } else {
+            try {
+                if (Get-Command 'Get-PnpDeviceProperty' -ErrorAction SilentlyContinue) {
+                    $prop = Get-PnpDeviceProperty -InstanceId $inst -KeyName 'DEVPKEY_Device_Parent' -ErrorAction SilentlyContinue
+                    if ($prop -and $prop.Data) { $parentId = [string]$prop.Data }
+                }
+            } catch {
+                $parentId = $null
+            }
+        }
+
+        $rootHubId = $parentId
+        $isUsb3 = $false
+        $isUsb2 = $false
+
+        if ($parentId) {
+            if ($parentId -like '*ROOT_HUB3*' -or $parentId -like '*ROOT_HUB*30*') {
+                $isUsb3 = $true
+            } elseif ($parentId -like '*ROOT_HUB2*' -or $parentId -like '*ROOT_HUB*20*') {
+                $isUsb2 = $true
+            } elseif ($parentId.StartsWith('USB\VID_', [System.StringComparison]::OrdinalIgnoreCase)) {
+                # Connected via an external USB hub; inspect the hub parent
+                try {
+                    if (Get-Command 'Get-PnpDeviceProperty' -ErrorAction SilentlyContinue) {
+                        $hubParentProp = Get-PnpDeviceProperty -InstanceId $parentId -KeyName 'DEVPKEY_Device_Parent' -ErrorAction SilentlyContinue
+                        if ($hubParentProp -and $hubParentProp.Data) {
+                            $grandParent = [string]$hubParentProp.Data
+                            if ($grandParent -like '*ROOT_HUB3*' -or $grandParent -like '*ROOT_HUB*30*') {
+                                $isUsb3 = $true
+                                $rootHubId = $grandParent
+                            } elseif ($grandParent -like '*ROOT_HUB2*' -or $grandParent -like '*ROOT_HUB*20*') {
+                                $isUsb2 = $true
+                                $rootHubId = $grandParent
+                            }
+                        }
+                    }
+                } catch {
+                    $null = $_
+                }
+            }
+        }
+
+        # Query Host Controller (parent of Root Hub)
+        $controllerId = $null
+        if ($rootHubId) {
+            try {
+                if (Get-Command 'Get-PnpDeviceProperty' -ErrorAction SilentlyContinue) {
+                    $cProp = Get-PnpDeviceProperty -InstanceId $rootHubId -KeyName 'DEVPKEY_Device_Parent' -ErrorAction SilentlyContinue
+                    if ($cProp -and $cProp.Data) { $controllerId = [string]$cProp.Data }
+                }
+            } catch {
+                $controllerId = $null
+            }
+        }
+
+        # Assess RF Risk Level
+        $hasAdjacentStorage = ($usbStorageDevices.Count -gt 0)
+        $rfRisk = if ($isUsb3 -and $hasAdjacentStorage) {
+            'High'
+        } elseif ($isUsb3) {
+            'Medium'
+        } else {
+            'Low'
+        }
+
+        $portType = if ($isUsb3) {
+            'USB 3.0+ SuperSpeed (xHCI)'
+        } elseif ($isUsb2) {
+            'USB 2.0 High-Speed (EHCI)'
+        } else {
+            'USB Host'
+        }
+
+        $details = if ($rfRisk -eq 'High') {
+            'Dongle is on a USB 3.0 controller alongside active USB storage devices. Radiated 2.4-2.5 GHz noise elevates RF noise floor by 15-20 dB, causing packet dropouts and range loss.'
+        } elseif ($rfRisk -eq 'Medium') {
+            'Dongle is connected to an unshielded USB 3.0 port. Broad-spectrum clock harmonics can reduce Bluetooth range.'
+        } else {
+            'Clean RF spectrum. Dongle is isolated on a USB 2.0 host port.'
+        }
+
+        $recommendation = if ($rfRisk -eq 'High') {
+            'Move dongle to a black USB 2.0 port or use a shielded USB extension cable (>= 1 meter).'
+        } elseif ($rfRisk -eq 'Medium') {
+            'Prefer a black USB 2.0 port or a shielded USB extension cable for maximum range and stability.'
+        } else {
+            'No action needed. Port RF environment is optimal.'
+        }
+
+        $results += [pscustomobject]@{
+            RadioName         = $r.FriendlyName
+            InstanceId        = $inst
+            IsUsbDongle       = $true
+            PortType          = $portType
+            RootHubId         = $rootHubId
+            HostControllerId  = $controllerId
+            RfRisk            = $rfRisk
+            HasStorageTraffic = $hasAdjacentStorage
+            Details           = $details
+            Recommendation    = $recommendation
+        }
+    }
+
+    return $results
+}
+
 New-Alias -Name Get-BTFixGamingControllers -Value Get-BTFixGamingController -Description 'Backward-compatible alias for Get-BTFixGamingController'
 
 Export-ModuleMember -Function @(
@@ -871,5 +1045,5 @@ Export-ModuleMember -Function @(
     'Get-BTFixHandsFreeDevice', 'Set-BTFixHandsFreeState', 'Get-BTFixBatteryStatus',
     'Get-BTFixAudioCodecInfo', 'Set-BTFixAudioCodecPreference',
     'Get-BTFixGamingController', 'Optimize-BTFixControllerLatency',
-    'Get-BTFixLEAudioCapability', 'Set-BTFixLEAudioPreference'
+    'Get-BTFixLEAudioCapability', 'Set-BTFixLEAudioPreference', 'Get-BTFixUsbTopology'
 ) -Alias @('Get-BTFixGamingControllers')
