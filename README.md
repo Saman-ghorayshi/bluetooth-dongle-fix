@@ -58,8 +58,8 @@ CLI users can pin the installer to a tag; every downloaded file is then
 verified against the release manifest before the install completes:
 
 ```powershell
-irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/v1.2.0/install.ps1 -OutFile install.ps1
-.\install.ps1 -Version v1.2.0
+irm https://raw.githubusercontent.com/Saman-ghorayshi/bluetooth-dongle-fix/v2.1.0/install.ps1 -OutFile install.ps1
+.\install.ps1 -Version v2.1.0
 ```
 
 ---
