@@ -235,6 +235,8 @@ if ($integrity.BaselineSource -eq 'none' -and (Test-BTFixAdministrator)) {
                 <Button x:Name="BtnScan" Content="🔍 Scan &amp; Benchmark" Margin="0,0,8,0" ToolTip="Refreshes hardware inventory and recalculates superiority scores."/>
                 <Button x:Name="BtnRestartAudio" Content="🎧 Fix Audio Drops" Margin="0,0,8,0" ToolTip="Restarts BTAGService and Windows AudioEndpointBuilder to re-route audio to earbuds without rebooting."/>
                 <Button x:Name="BtnRollback" Content="🔄 Rollback" Margin="0,0,8,0" ToolTip="Restores hardware state from the latest backup snapshot."/>
+                <Button x:Name="BtnCoex" Content="📡 Wi-Fi Coex" Margin="0,0,8,0" ToolTip="Analyzes 2.4 GHz Wi-Fi spectrum collisions with Bluetooth AFH frequencies and recommends optimal router channels."/>
+                <Button x:Name="BtnDualBoot" Content="🐧 Dual-Boot Sync" Margin="0,0,8,0" ToolTip="Exports Bluetooth pairing link keys to Linux BlueZ format so headphones and mice work across dual-boot OS without re-pairing."/>
                 <Button x:Name="BtnExport" Content="📋 Export Report" Margin="0,0,8,0" ToolTip="Generates a full Markdown &amp; JSON diagnostics bundle."/>
                 <Button x:Name="BtnTraySentry" Content="🛡️ Sentry Tray Mode" Margin="0,0,16,0" ToolTip="Runs BTFix Sentry in the Windows notification area to automatically auto-resolve conflicts and monitor battery in the background."/>
                 
@@ -290,6 +292,8 @@ $btnLEAudio           = $window.FindName('BtnLEAudio')
 $btnScan              = $window.FindName('BtnScan')
 $btnRestartAudio      = $window.FindName('BtnRestartAudio')
 $btnRollback          = $window.FindName('BtnRollback')
+$btnCoex              = $window.FindName('BtnCoex')
+$btnDualBoot          = $window.FindName('BtnDualBoot')
 $btnExport            = $window.FindName('BtnExport')
 $btnTraySentry        = $window.FindName('BtnTraySentry')
 $chkPreferInternal    = $window.FindName('ChkPreferInternal')
@@ -551,7 +555,9 @@ function Show-HardwareState {
     # Peripherals & Battery Levels
     Write-GuiLog 'INFO' 'Enumerating paired Bluetooth audio endpoints & battery telemetry...'
     $script:LastScannedPeripherals = @(Get-BTFixBatteryStatus)
+    $script:LastScannedSignals = @(Get-BTFixSignalQuality)
     $peripherals = $script:LastScannedPeripherals
+    $signals = $script:LastScannedSignals
     $txtPeripheralCount.Text = "$($peripherals.Count) found"
     if ($peripherals.Count -eq 0) {
         $tbNone = New-Object System.Windows.Controls.TextBlock
@@ -609,6 +615,26 @@ function Show-HardwareState {
                 }
                 $null = $dpBat.Children.Add($tbGauge)
                 $null = $spPer.Children.Add($dpBat)
+            }
+
+            # Signal Quality & RSSI meter badge
+            $sigMatch = @($signals | Where-Object { $_.InstanceId -eq $p.InstanceId -or ($_.DeviceAddress -and $p.InstanceId -like "*$($_.DeviceAddress)*") }) | Select-Object -First 1
+            if ($sigMatch -and $p.IsConnected) {
+                $dpSig = New-Object System.Windows.Controls.DockPanel
+                $dpSig.Margin = New-Object System.Windows.Thickness(0, 2, 0, 0)
+                $tbSig = New-Object System.Windows.Controls.TextBlock
+                $tbSig.Text = "📶 $($sigMatch.Gauge)"
+                $tbSig.FontSize = 10
+                $tbSig.FontFamily = New-Object System.Windows.Media.FontFamily('Consolas, monospace')
+                $tbSig.Foreground = switch ($sigMatch.Quality) {
+                    'Excellent' { $brushConv.ConvertFromString('#3FB950') }
+                    'Good'      { $brushConv.ConvertFromString('#58A6FF') }
+                    'Fair'      { $brushConv.ConvertFromString('#D29922') }
+                    'Poor'      { $brushConv.ConvertFromString('#F85149') }
+                    default     { $brushConv.ConvertFromString('#8B949E') }
+                }
+                $null = $dpSig.Children.Add($tbSig)
+                $null = $spPer.Children.Add($dpSig)
             }
 
             $bPer.Child = $spPer
@@ -681,7 +707,7 @@ function Set-GuiActionButtonState {
     [CmdletBinding(SupportsShouldProcess)]
     param([bool]$Enabled)
     if ($PSCmdlet.ShouldProcess('action buttons', "Set enabled=$Enabled")) {
-        foreach ($b in @($btnAutoFix, $btnScan, $btnRestartAudio, $btnRollback, $btnHiFiMode, $btnGameMode, $btnCodec, $btnLEAudio)) {
+        foreach ($b in @($btnAutoFix, $btnScan, $btnRestartAudio, $btnRollback, $btnHiFiMode, $btnGameMode, $btnCodec, $btnLEAudio, $btnCoex, $btnDualBoot)) {
             if ($b) { $b.IsEnabled = $Enabled }
         }
     }
@@ -872,6 +898,54 @@ $btnRollback.Add_Click({
         Set-GuiActionButtonState -Enabled $true
     }
 })
+
+if ($btnCoex) {
+    $btnCoex.Add_Click({
+        Write-GuiLog 'ACTION' 'Analyzing Wi-Fi 2.4 GHz spectrum coexistence...'
+        $coex = Get-BTFixWifiCoexistence
+        if (-not $coex.IsConnected) {
+            Write-GuiLog 'INFO' "Wi-Fi is disconnected: $($coex.Details)"
+            [System.Windows.MessageBox]::Show($coex.Details, 'Wi-Fi Disconnected', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+        } else {
+            $msg = "Wi-Fi Network: $($coex.Ssid) (BSSID: $($coex.Bssid))`n" +
+                   "Band: $($coex.Band) (Channel $($coex.Channel), $($coex.FrequencyMHz) MHz)`n" +
+                   "Signal: $($coex.SignalPercent)% ($($coex.Rssi) dBm)`n" +
+                   "RF Collision: $($coex.OverlappedChannelCount) of 79 Bluetooth AFH channels ($($coex.OverlapPercentage)%)`n`n" +
+                   "Spectrum Analysis:`n$($coex.SpectrumChart)`n`n" +
+                   "Diagnosis: $($coex.Details)`n`n" +
+                   "Recommendation: $($coex.Recommendation)"
+            $logLvl = if ($coex.RfRisk -eq 'High') { 'WARN' } else { 'OK' }
+            Write-GuiLog $logLvl "Wi-Fi Coexistence: $($coex.RfRisk) Risk ($($coex.OverlapPercentage)% collision on Ch $($coex.Channel))"
+            [System.Windows.MessageBox]::Show($msg, "Wi-Fi Coexistence Analysis - $($coex.RfRisk) Risk", [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+        }
+    })
+}
+
+if ($btnDualBoot) {
+    $btnDualBoot.Add_Click({
+        if (-not (Test-BTFixAdministrator)) {
+            [System.Windows.MessageBox]::Show('Administrator rights are required to read pairing keys from the Windows registry (HKLM BTHPORT).', 'Administrator Required', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Warning)
+            $btnElevate.RaiseEvent((New-Object System.Windows.RoutedEventArgs([System.Windows.Controls.Button]::ClickEvent)))
+            return
+        }
+        Write-GuiLog 'ACTION' 'Exporting Bluetooth pairing keys for Linux dual-boot synchronization...'
+        $res = Export-BTFixDualBootKey
+        if ($res.Success) {
+            Write-GuiLog 'OK' "Exported $($res.DeviceCount) pairing key(s) to: $($res.OutputPath)"
+            $msg = "Successfully exported $($res.DeviceCount) paired device(s) across $($res.AdapterCount) adapter(s)!`n`n" +
+                   "Output directory: $($res.OutputPath)`n" +
+                   "Linux sync script: $($res.ScriptPath)`n`n" +
+                   "To synchronize in Linux:`n" +
+                   "1. Boot into Linux (Ubuntu, Debian, Arch, Fedora, openSUSE).`n" +
+                   "2. Run: sudo bash `"$($res.ScriptPath)`"`n`n" +
+                   "Your Bluetooth devices will now work on both OS without re-pairing!"
+            [System.Windows.MessageBox]::Show($msg, 'Dual-Boot Keys Exported', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Information)
+        } else {
+            Write-GuiLog 'ERROR' "Dual-boot key export failed: $($res.Message)"
+            [System.Windows.MessageBox]::Show("Key export failed: $($res.Message)", 'Dual-Boot Export', [System.Windows.MessageBoxButton]::OK, [System.Windows.MessageBoxImage]::Error)
+        }
+    })
+}
 
 $btnExport.Add_Click({
     try {

@@ -1,6 +1,6 @@
-@{
+﻿@{
     RootModule        = 'BTFix.psm1'
-    ModuleVersion     = '2.1.0'
+    ModuleVersion     = '2.2.0'
     GUID              = 'b7f0c2a4-9d3e-4c1a-8f5b-2e6d0a1c7f43'
     Author            = 'Saman Ghorayshi'
     CompanyName       = 'BTFix contributors'
@@ -13,11 +13,12 @@
         'Write-BTFixReport', 'Write-BTFixReportJson', 'Write-BTFixLog', 'Test-BTFixAdministrator',
         'Get-BTFixStateRoot', 'Test-BTFixInternalRadio', 'Test-BTFixRadioInstanceId',
         'Resolve-BTFixWantedRadio', 'Restart-BTFixAudioStack', 'Get-BTFixLmpVersionName',
-        'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio'
+        'Get-BTFixRadioScore', 'Get-BTFixSuperiorRadio',
+        'Get-BTFixWifiCoexistence', 'Get-BTFixSignalQuality', 'Export-BTFixDualBootKey'
     )
     CmdletsToExport   = @()
     VariablesToExport = @()
-    AliasesToExport   = @('Get-BTFixRadioSpecs')
+    AliasesToExport   = @('Get-BTFixRadioSpecs', 'Get-BTFixCoex', 'Get-BTFixSignal', 'Export-BTFixDualBootKeys', 'Export-BTFixKeys')
     PrivateData       = @{
         PSData = @{
             Tags       = @('Bluetooth', 'Driver', 'Windows', 'Repair', 'Code31')

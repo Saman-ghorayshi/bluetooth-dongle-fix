@@ -995,4 +995,272 @@ Describe 'system tray sentry daemon' {
     }
 }
 
+Describe 'wifi coexistence and spectrum collision' {
+    $netsh24Ch11 = @"
+There is 1 interface on the system:
+    Name                   : Wi-Fi
+    Description            : Intel(R) Wi-Fi 6 AX200 160MHz
+    State                  : connected
+    SSID                   : Office-2.4G
+    AP BSSID               : 11:22:33:44:55:66
+    Band                   : 2.4 GHz
+    Channel                : 11
+    Radio type             : 802.11ax
+    Signal                 : 95%
+    Rssi                   : -52
+    Receive rate (Mbps)    : 144.0
+    Transmit rate (Mbps)   : 144.0
+"@
+
+    $netsh24Ch6 = @"
+There is 1 interface on the system:
+    Name                   : Wi-Fi
+    Description            : Intel(R) Wi-Fi 6 AX200 160MHz
+    State                  : connected
+    SSID                   : Default-Router
+    AP BSSID               : aa:bb:cc:dd:ee:ff
+    Band                   : 2.4 GHz
+    Channel                : 6
+    Radio type             : 802.11n
+    Signal                 : 88%
+    Rssi                   : -58
+    Receive rate (Mbps)    : 72.2
+    Transmit rate (Mbps)   : 72.2
+"@
+
+    $netsh5G = @"
+There is 1 interface on the system:
+    Name                   : Wi-Fi
+    Description            : Intel(R) Wi-Fi 6 AX200 160MHz
+    State                  : connected
+    SSID                   : UltraFast-5G
+    AP BSSID               : 22:33:44:55:66:77
+    Band                   : 5 GHz
+    Channel                : 36
+    Radio type             : 802.11ax
+    Signal                 : 100%
+    Rssi                   : -45
+    Receive rate (Mbps)    : 1200.0
+    Transmit rate (Mbps)   : 1200.0
+"@
+
+    $netshDisconnected = @"
+There is 1 interface on the system:
+    Name                   : Wi-Fi
+    Description            : Intel(R) Wi-Fi 6 AX200 160MHz
+    State                  : disconnected
+"@
+
+    It 'accurately analyzes 2.4 GHz Channel 11 spectrum overlap' {
+        $coex = Get-BTFixWifiCoexistence -RawNetshOutput $netsh24Ch11
+        Assert-True $coex.IsConnected
+        Assert-Equal '2.4 GHz' $coex.Band
+        Assert-Equal 11 $coex.Channel
+        Assert-Equal 2462 $coex.FrequencyMHz
+        Assert-Equal 'Medium' $coex.RfRisk
+        Assert-True ($coex.OverlappedChannelCount -gt 15)
+        Assert-True ($coex.OverlapPercentage -gt 20.0)
+        Assert-True ($coex.SpectrumChart -like '*collision*')
+    }
+
+    It 'flags 2.4 GHz Channel 6 as High RF risk' {
+        $coex = Get-BTFixWifiCoexistence -RawNetshOutput $netsh24Ch6
+        Assert-True $coex.IsConnected
+        Assert-Equal 6 $coex.Channel
+        Assert-Equal 2437 $coex.FrequencyMHz
+        Assert-Equal 'High' $coex.RfRisk
+        Assert-True ($coex.OverlappedBluetoothChannels -contains 35)
+    }
+
+    It 'recognizes 5 GHz Wi-Fi as isolated with zero Bluetooth RF overlap' {
+        $coex = Get-BTFixWifiCoexistence -RawNetshOutput $netsh5G
+        Assert-True $coex.IsConnected
+        Assert-Equal '5 GHz' $coex.Band
+        Assert-Equal 'Low' $coex.RfRisk
+        Assert-Equal 0 $coex.OverlappedChannelCount
+        Assert-Equal 0.0 $coex.OverlapPercentage
+        Assert-True ($coex.Recommendation -like '*Zero RF collision*')
+    }
+
+    It 'handles disconnected Wi-Fi interface without throwing' {
+        $coex = Get-BTFixWifiCoexistence -RawNetshOutput $netshDisconnected
+        Assert-False $coex.IsConnected
+        Assert-Equal 'None' $coex.RfRisk
+        Assert-Equal 0 $coex.OverlappedChannelCount
+    }
+
+    It 'handles completely missing Wi-Fi hardware without throwing' {
+        $coex = Get-BTFixWifiCoexistence -RawNetshOutput 'There is no wireless interface on the system.'
+        Assert-False $coex.IsConnected
+        Assert-Equal 'None' $coex.RfRisk
+    }
+
+    It 'routes CLI Coex and WifiCoex modes without throwing' {
+        $cli = Join-Path (Split-Path $PSScriptRoot -Parent) 'BTFix.ps1'
+        $threw = $false
+        try {
+            $out1 = & $cli -Mode Coex 6>&1
+            $out2 = & $cli -Mode WifiCoex 6>&1
+        } catch {
+            $threw = $true
+        }
+        Assert-False $threw 'CLI Coex modes should execute cleanly'
+        Assert-True ($out1.Length -gt 0)
+        Assert-True ($out2.Length -gt 0)
+    }
+}
+
+Describe 'signal quality and rssi meter' {
+    $mockDevs = @(
+        [pscustomobject]@{
+            FriendlyName = 'Sony WH-1000XM5'
+            InstanceId   = 'BTHENUM\DEV_001122334455\7&0&0'
+            IsConnected  = $true
+            Rssi         = -48
+        },
+        [pscustomobject]@{
+            FriendlyName = 'AirPods Pro'
+            InstanceId   = 'BTHENUM\DEV_AABBCCDDEEFF\7&0&0'
+            IsConnected  = $true
+            Rssi         = -64
+        },
+        [pscustomobject]@{
+            FriendlyName = 'Logitech MX Master 3S'
+            InstanceId   = 'BTHLE\DEV_112233445566\7&0&0'
+            IsConnected  = $true
+            Rssi         = -78
+        },
+        [pscustomobject]@{
+            FriendlyName = 'Weak Distant Beacon'
+            InstanceId   = 'BTHENUM\DEV_998877665544\7&0&0'
+            IsConnected  = $true
+            Rssi         = -92
+        },
+        [pscustomobject]@{
+            FriendlyName = 'Offline Controller'
+            InstanceId   = 'BTHENUM\DEV_554433221100\7&0&0'
+            IsConnected  = $false
+            Rssi         = $null
+        }
+    )
+
+    It 'classifies RSSI signal quality levels correctly' {
+        $res = @(Get-BTFixSignalQuality -MockDevices $mockDevs)
+        Assert-Equal 5 $res.Count
+
+        $xm5 = @($res | Where-Object { $_.FriendlyName -eq 'Sony WH-1000XM5' })[0]
+        Assert-Equal 'Excellent' $xm5.Quality
+        Assert-True ($xm5.QualityScore -ge 90)
+        Assert-True ($xm5.Gauge -like '*Excellent*')
+
+        $airpods = @($res | Where-Object { $_.FriendlyName -eq 'AirPods Pro' })[0]
+        Assert-Equal 'Good' $airpods.Quality
+        Assert-True ($airpods.QualityScore -ge 75)
+
+        $mouse = @($res | Where-Object { $_.FriendlyName -eq 'Logitech MX Master 3S' })[0]
+        Assert-Equal 'Fair' $mouse.Quality
+
+        $weak = @($res | Where-Object { $_.FriendlyName -eq 'Weak Distant Beacon' })[0]
+        Assert-Equal 'Poor' $weak.Quality
+
+        $offline = @($res | Where-Object { $_.FriendlyName -eq 'Offline Controller' })[0]
+        Assert-Equal 'Standby' $offline.Quality
+        Assert-Equal 0 $offline.QualityScore
+        Assert-False $offline.IsConnected
+    }
+
+    It 'routes CLI Signal and RSSI modes without throwing' {
+        $cli = Join-Path (Split-Path $PSScriptRoot -Parent) 'BTFix.ps1'
+        $threw = $false
+        try {
+            $out1 = & $cli -Mode Signal 6>&1
+            $out2 = & $cli -Mode RSSI 6>&1
+        } catch {
+            $threw = $true
+        }
+        Assert-False $threw 'CLI Signal modes should execute cleanly'
+        Assert-True ($out1.Length -gt 0)
+        Assert-True ($out2.Length -gt 0)
+    }
+}
+
+Describe 'dual-boot linux bluez pairing key sync' {
+    $mockRegistry = @{
+        '047f0e6034e6' = @{
+            Devices = @{
+                '1c5216f3ab89' = @{
+                    LinkKey = '758BDBAD1F6D26AB272B91A642FDC00D'
+                }
+            }
+            BleDevices = @{
+                '9c19c21b51aa' = @{
+                    LTK         = '112233445566778899AABBCCDDEEFF00'
+                    IRK         = '00112233445566778899AABBCCDDEEFF'
+                    EDIV        = 4660
+                    ERand       = '578437695752307201'
+                    AddressType = 0
+                }
+            }
+        }
+    }
+
+    It 'exports pairing keys into Linux BlueZ format and generates sync bash script' {
+        $tempDir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-dualboot-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $res = Export-BTFixDualBootKey -MockRegistry $mockRegistry -OutputPath $tempDir
+            Assert-True $res.Success
+            Assert-Equal 1 $res.AdapterCount
+            Assert-Equal 2 $res.DeviceCount
+            Assert-True (Test-Path -LiteralPath $res.ScriptPath)
+
+            # Check Classic device info
+            $classicInfo = Join-Path $tempDir 'bluez\04-7F-0E-60-34-E6\1C-52-16-F3-AB-89\info'
+            Assert-True (Test-Path -LiteralPath $classicInfo)
+            $classicContent = Get-Content -LiteralPath $classicInfo -Raw
+            Assert-True ($classicContent -like '*Key=758BDBAD1F6D26AB272B91A642FDC00D*')
+            Assert-True ($classicContent -like '*SupportedTechnologies=BR/EDR;*')
+
+            # Check BLE device info
+            $bleInfo = Join-Path $tempDir 'bluez\04-7F-0E-60-34-E6\9C-19-C2-1B-51-AA\info'
+            Assert-True (Test-Path -LiteralPath $bleInfo)
+            $bleContent = Get-Content -LiteralPath $bleInfo -Raw
+            Assert-True ($bleContent -like '*Key=112233445566778899AABBCCDDEEFF00*')
+            Assert-True ($bleContent -like '*EDiv=4660*')
+
+            # Check sync-bluez-keys.sh content
+            $scriptContent = Get-Content -LiteralPath $res.ScriptPath -Raw
+            Assert-True ($scriptContent -like '*systemctl stop bluetooth*')
+            Assert-True ($scriptContent -like '*mkdir -p "/var/lib/bluetooth/04:7F:0E:60:34:E6/1C:52:16:F3:AB:89"*')
+            Assert-True ($scriptContent -like '*chmod -R 700 /var/lib/bluetooth*')
+        } finally {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'supports -WhatIf when exporting dual-boot keys' {
+        $tempDir = Join-Path ([IO.Path]::GetTempPath()) ('btfix-dualboot-whatif-' + [guid]::NewGuid().ToString('N'))
+        try {
+            $res = Export-BTFixDualBootKey -MockRegistry $mockRegistry -OutputPath $tempDir -WhatIf
+            Assert-True ($null -ne $res)
+            Assert-False (Test-Path -LiteralPath $tempDir) 'WhatIf should not create files'
+        } finally {
+            Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+
+    It 'routes CLI DualBoot and SyncKeys modes without throwing' {
+        $cli = Join-Path (Split-Path $PSScriptRoot -Parent) 'BTFix.ps1'
+        $threw = $false
+        try {
+            $out1 = & $cli -Mode DualBoot -WhatIf 6>&1
+            $out2 = & $cli -Mode SyncKeys -WhatIf 6>&1
+        } catch {
+            $threw = $true
+        }
+        Assert-False $threw 'CLI DualBoot modes should execute cleanly'
+        Assert-True ($out1.Length -gt 0)
+        Assert-True ($out2.Length -gt 0)
+    }
+}
+
 Write-Summary

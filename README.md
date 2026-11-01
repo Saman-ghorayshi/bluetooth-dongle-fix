@@ -1,7 +1,7 @@
-# 🎧 Bluetooth Dongle Fix (BTFix)
+﻿# 🎧 Bluetooth Dongle Fix (BTFix)
 
 <p align="center">
-  <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/actions"><img src="https://img.shields.io/badge/tests-76%2F76%20passing-brightgreen?style=flat-square&logo=github-actions" alt="Tests Status"></a>
+  <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/actions"><img src="https://img.shields.io/badge/tests-93%2F93%20passing-brightgreen?style=flat-square&logo=github-actions" alt="Tests Status"></a>
   <a href="https://github.com/Saman-ghorayshi/bluetooth-dongle-fix/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="License MIT"></a>
   <img src="https://img.shields.io/badge/platform-Windows%2010%20%7C%2011-0078D6?style=flat-square&logo=windows" alt="Platform Windows">
   <img src="https://img.shields.io/badge/powershell-5.1%20%7C%207%2B-5391FE?style=flat-square&logo=powershell" alt="PowerShell">
@@ -125,6 +125,23 @@ BTFix includes a native Fluent dark-mode graphical user interface built on Windo
   * Double-click `BTFix-Tray.bat` (hidden background mode).
   * Or from PowerShell: `.\BTFix.ps1 -Mode Sentry`.
   * Or click **"🛡️ Sentry Tray Mode"** inside the GUI dashboard.
+
+### 8. 📡 Wi-Fi 2.4 GHz Coexistence & Channel Collision Analyzer (`-Mode Coex`)
+* **The Problem**: Bluetooth audio skips, drops packets, or experiences micro-stutters whenever nearby Wi-Fi network traffic occurs on laptops and desktop PCs.
+* **The Cause**: Bluetooth AFH operates on 79 1-MHz channels from 2402 to 2480 MHz. A single 2.4 GHz Wi-Fi channel occupies 22 MHz (or 40 MHz with channel bonding), colliding with 20 to 41 Bluetooth channels (~25% to 52% of the entire Bluetooth band). Default router Channel 6 is heavily congested worldwide.
+* **The Fix**: BTFix queries active Wi-Fi interfaces via `netsh`, maps active channel bounds against Bluetooth's 79 AFH channels, computes the exact collision percentage, evaluates RF risk (`Low`, `Medium`, `High`), renders an ASCII spectrum allocation chart, and recommends router channel shifts (Ch 1/11 at 20 MHz or 5 GHz isolation).
+* **CLI**: `.\BTFix.ps1 -Mode Coex` (or click **"📡 Wi-Fi Coex"** in GUI).
+
+### 9. 📶 Real-Time Bluetooth RSSI & Link Quality Meter (`-Mode Signal`)
+* **The Problem**: Windows provides no native signal strength indicator for paired Bluetooth devices, leaving users guessing why headphones stutter or controllers disconnect.
+* **The Fix**: Inspects physical layer link margin and queries `DEVPKEY_Aep_SignalStrength` (`{A35996AB-11CF-4935-8B61-A6761081ECDF} 6`) from Windows Device Association Framework. Translates RSSI to human ratings (`Excellent` &ge; -55 dBm, `Good`, `Fair`, `Poor`) and renders real-time ASCII meters (`[==========] -50 dBm`) and GUI badges.
+* **CLI**: `.\BTFix.ps1 -Mode Signal` (or `.\BTFix.ps1 -Mode RSSI`).
+
+### 10. 🐧 Dual-Boot Windows/Linux Bluetooth Pairing Key Sync (`-Mode DualBoot`)
+* **The Problem**: In dual-boot setups (Windows + Ubuntu/Debian/Arch/Fedora), pairing Bluetooth headphones, keyboards, or mice in Windows breaks pairing in Linux, and vice versa. Every OS reboot requires un-pairing and re-pairing.
+* **The Cause**: Both operating systems generate distinct 128-bit cryptographic link keys with the peripheral. Pairing in one OS causes the peripheral to overwrite the link key stored in its NVRAM.
+* **The Fix**: BTFix safely reads the cryptographic pairing Link Keys (Classic BR/EDR and BLE LTK/IRK/EDIV) from `HKLM:\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Keys`, converts them to Linux BlueZ format (`/var/lib/bluetooth/[adapter]/[device]/info`), and generates a copy-paste ready `sync-bluez-keys.sh` script. Booting into Linux and running `sudo ./sync-bluez-keys.sh` allows devices to work instantly across both OS without re-pairing!
+* **CLI**: `.\BTFix.ps1 -Mode DualBoot` (or click **"🐧 Dual-Boot Sync"** in GUI).
 
 ---
 

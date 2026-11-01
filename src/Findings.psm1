@@ -322,6 +322,23 @@ function Get-BTFixFinding {
         }
     }
 
+    # --- Wi-Fi 2.4 GHz Coexistence Advisory -----------------------------
+    if (-not $NoLive -and (Get-Command 'Get-BTFixWifiCoexistence' -ErrorAction SilentlyContinue)) {
+        $wifiCoex = Get-BTFixWifiCoexistence
+        if ($wifiCoex.IsConnected -and $wifiCoex.Band -like '*2.4*') {
+            $coexSev = if ($wifiCoex.RfRisk -eq 'High') { 'Medium' } else { 'Info' }
+            $findings += [pscustomobject]@{
+                Id          = 'wifi-coexistence-24ghz'
+                Severity    = $coexSev
+                Title       = "Wi-Fi 2.4 GHz RF overlap with Bluetooth ($($wifiCoex.OverlapPercentage)% spectrum collision)"
+                Detail      = $wifiCoex.Details
+                Fix         = $wifiCoex.Recommendation
+                AutoFixable = $false
+                Data        = @{ WifiCoex = $wifiCoex }
+            }
+        }
+    }
+
     $order = @{ High = 0; Medium = 1; Low = 2; Info = 3 }
     return @($findings | Sort-Object -Property @{ Expression = { $order[$_.Severity] } }, Title)
 }

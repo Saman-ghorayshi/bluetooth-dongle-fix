@@ -37,7 +37,7 @@
 [Diagnostics.CodeAnalysis.SuppressMessageAttribute('PSAvoidUsingWriteHost', '',
     Justification = 'BTFix is a console tool: coloured progress output belongs on the host, not in the pipeline.')]
 param(
-    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare', 'HandsFree', 'Battery', 'Codec', 'GameMode', 'LEAudio', 'Topology', 'UsbTopology', 'Tray', 'Sentry', 'Watch')]
+    [ValidateSet('Check', 'Diagnose', 'Fix', 'Repair', 'Rollback', 'Report', 'Forget', 'Chipsets', 'Compare', 'HandsFree', 'Battery', 'Codec', 'GameMode', 'LEAudio', 'Topology', 'UsbTopology', 'Tray', 'Sentry', 'Watch', 'Coex', 'WifiCoex', 'Signal', 'RSSI', 'DualBoot', 'SyncKeys')]
     [string]$Mode = 'Check',
 
     # State for configurable modes (HandsFree, Codec, GameMode, LEAudio)
@@ -71,6 +71,9 @@ param(
 
     # Where snapshots are stored (default %LOCALAPPDATA%\BTFix).
     [string]$BackupPath,
+
+    # Output directory for exported files (e.g. DualBoot keys).
+    [string]$OutputPath,
 
     # Write a Markdown diagnostics report here.
     [string]$ReportPath
@@ -132,9 +135,9 @@ function Invoke-SelfElevated {
     }
 }
 
-$effectiveMode = switch ($Mode) { 'Diagnose' { 'Check' } 'Repair' { 'Fix' } 'UsbTopology' { 'Topology' } 'Sentry' { 'Tray' } 'Watch' { 'Tray' } default { $Mode } }
+$effectiveMode = switch ($Mode) { 'Diagnose' { 'Check' } 'Repair' { 'Fix' } 'UsbTopology' { 'Topology' } 'Sentry' { 'Tray' } 'Watch' { 'Tray' } 'WifiCoex' { 'Coex' } 'RSSI' { 'Signal' } 'SyncKeys' { 'DualBoot' } default { $Mode } }
 $effectiveState = switch ($State) { 'Off' { 'Disable' } 'On' { 'Enable' } default { $State } }
-$needsAdmin = ($effectiveMode -in @('Fix', 'Rollback', 'Forget')) -or ($effectiveMode -in @('HandsFree', 'Codec', 'GameMode') -and $effectiveState -ne 'Status')
+$needsAdmin = ($effectiveMode -in @('Fix', 'Rollback', 'Forget', 'DualBoot')) -or ($effectiveMode -in @('HandsFree', 'Codec', 'GameMode', 'LEAudio') -and $effectiveState -ne 'Status')
 if ($needsAdmin -and -not (Test-BTFixAdministrator)) {
     if ($NoElevation) {
         Write-Host "Mode '$Mode' needs administrator rights." -ForegroundColor Red
@@ -151,6 +154,7 @@ if ($needsAdmin -and -not (Test-BTFixAdministrator)) {
     if ($ForgetStale) { $forward += '-ForgetStale' }
     if ($BackupPath) { $forward += @('-BackupPath', $BackupPath) }
     if ($ReportPath) { $forward += @('-ReportPath', $ReportPath) }
+    if ($OutputPath) { $forward += @('-OutputPath', $OutputPath) }
     if ($WhatIfPreference) { $forward += '-WhatIf' }
     exit (Invoke-SelfElevated -Arguments $forward)
 }
@@ -504,6 +508,84 @@ switch ($effectiveMode) {
         }
         Start-Process powershell.exe -ArgumentList @('-WindowStyle', 'Hidden', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-STA', '-File', "`"$trayScript`"")
         Write-Host 'BTFix Sentry is now active in your Windows notification area (System Tray).' -ForegroundColor Green
+    }
+
+    'Coex' {
+        Write-Host ''
+        Write-Host 'Wi-Fi 2.4 GHz Coexistence & Spectrum Collision Analyzer' -ForegroundColor Cyan
+        Write-Host '--------------------------------------------------------' -ForegroundColor Cyan
+        $coex = Get-BTFixWifiCoexistence
+        if (-not $coex.IsConnected) {
+            Write-Host ("  Status      : {0}" -f $coex.Description) -ForegroundColor Yellow
+            Write-Host ("  RF Impact   : {0}" -f $coex.Details) -ForegroundColor Green
+        } else {
+            $riskColor = switch ($coex.RfRisk) { 'High' { 'Red' } 'Medium' { 'Yellow' } default { 'Green' } }
+            Write-Host ''
+            Write-Host ("  Interface   : {0} ({1})" -f $coex.InterfaceName, $coex.Description) -ForegroundColor White
+            Write-Host ("  SSID        : {0} (BSSID: {1})" -f $coex.Ssid, $coex.Bssid) -ForegroundColor White
+            Write-Host ("  Band        : {0} (Channel {1}, {2} MHz)" -f $coex.Band, $coex.Channel, $coex.FrequencyMHz) -ForegroundColor White
+            Write-Host ("  Protocol    : {0} (Link: {1} Mbps Tx / {2} Mbps Rx)" -f $coex.RadioType, $coex.TransmitRateMbps, $coex.ReceiveRateMbps) -ForegroundColor DarkGray
+            Write-Host ("  Signal      : {0}% ({1} dBm)" -f $coex.SignalPercent, $(if ($null -ne $coex.Rssi) { $coex.Rssi } else { 'N/A' })) -ForegroundColor White
+            Write-Host ("  RF Risk     : [{0} Risk]" -f $coex.RfRisk) -ForegroundColor $riskColor
+            Write-Host ("  Collision   : {0} of 79 Bluetooth AFH channels ({1}% of band)" -f $coex.OverlappedChannelCount, $coex.OverlapPercentage) -ForegroundColor $(if ($coex.OverlapPercentage -gt 0) { 'Yellow' } else { 'Green' })
+            Write-Host ''
+            Write-Host 'RF Spectrum Allocation Map:' -ForegroundColor Cyan
+            Write-Host ($coex.SpectrumChart) -ForegroundColor Gray
+            Write-Host ''
+            Write-Host ("Diagnosis     : {0}" -f $coex.Details) -ForegroundColor Gray
+            Write-Host ("Recommendation: {0}" -f $coex.Recommendation) -ForegroundColor $(if ($coex.RfRisk -ne 'Low') { 'Yellow' } else { 'Green' })
+        }
+    }
+
+    'Signal' {
+        Write-Host ''
+        Write-Host 'Real-Time Bluetooth RSSI & Link Quality Meter' -ForegroundColor Cyan
+        Write-Host '---------------------------------------------' -ForegroundColor Cyan
+        $signals = @(Get-BTFixSignalQuality -Name $Device)
+        if ($signals.Count -eq 0) {
+            Write-Host '  (no paired Bluetooth peripherals detected)' -ForegroundColor Yellow
+        } else {
+            foreach ($s in $signals) {
+                $qColor = switch ($s.Quality) { 'Excellent' { 'Green' } 'Good' { 'Green' } 'Fair' { 'Yellow' } 'Poor' { 'Red' } default { 'DarkGray' } }
+                Write-Host ''
+                Write-Host ("  Peripheral  : {0}" -f $s.FriendlyName) -ForegroundColor White
+                Write-Host ("  MAC Address : {0}" -f $(if ($s.DeviceAddress) { $s.DeviceAddress } else { 'Unknown' })) -ForegroundColor DarkGray
+                Write-Host ("  Link State  : {0}" -f $(if ($s.IsConnected) { 'Connected' } else { 'Disconnected / Standby' })) -ForegroundColor $(if ($s.IsConnected) { 'Green' } else { 'DarkGray' })
+                Write-Host ("  Signal Meter: {0}" -f $s.Gauge) -ForegroundColor $qColor
+                Write-Host ("  Quality     : [{0}] (Score: {1}/100)" -f $s.Quality, $s.QualityScore) -ForegroundColor $qColor
+                Write-Host ("  Diagnostics : {0}" -f $s.Details) -ForegroundColor Gray
+                if ($s.Recommendation) {
+                    Write-Host ("  Advice      : {0}" -f $s.Recommendation) -ForegroundColor DarkGray
+                }
+            }
+        }
+    }
+
+    'DualBoot' {
+        Write-Host ''
+        Write-Host 'Dual-Boot Windows/Linux Bluetooth Pairing Key Exporter' -ForegroundColor Cyan
+        Write-Host '------------------------------------------------------' -ForegroundColor Cyan
+        $res = Export-BTFixDualBootKey -OutputPath $OutputPath -LogPath $LogPath
+        if ($res.Success) {
+            Write-Host ''
+            Write-Host ("Successfully exported {0} paired device(s) across {1} adapter(s)!" -f $res.DeviceCount, $res.AdapterCount) -ForegroundColor Green
+            Write-Host ("Output Folder : {0}" -f $res.OutputPath) -ForegroundColor White
+            Write-Host ("Linux Script  : {0}" -f $res.ScriptPath) -ForegroundColor Cyan
+            Write-Host ''
+            Write-Host 'Exported Devices:' -ForegroundColor White
+            foreach ($dev in $res.Devices) {
+                Write-Host ("  - {0} [{1}] -> Adapter: {2}" -f $dev.FriendlyName, $dev.DeviceMac, $dev.AdapterMac) -ForegroundColor DarkGray
+            }
+            Write-Host ''
+            Write-Host 'How to synchronize on Linux (Ubuntu, Debian, Arch, Fedora, openSUSE):' -ForegroundColor Yellow
+            Write-Host '  1. Copy the output folder to your Linux partition or a USB flash drive.' -ForegroundColor Gray
+            Write-Host ("  2. Run the auto-generated script with root privileges:") -ForegroundColor Gray
+            Write-Host ('       sudo bash "{0}"' -f $res.ScriptPath) -ForegroundColor Green
+            Write-Host '  3. Your Bluetooth devices will connect immediately on Linux without re-pairing!' -ForegroundColor Gray
+        } else {
+            Write-Host ''
+            Write-Host ("Export failed: {0}" -f $res.Message) -ForegroundColor Red
+        }
     }
 
     'Chipsets' {

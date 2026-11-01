@@ -1,7 +1,34 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to this project are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+## [2.2.0] - 2026-11-01
+
+### Added
+- **Wi-Fi 2.4 GHz Coexistence & Spectrum Collision Analyzer (`-Mode Coex` / `-Mode WifiCoex`)**:
+  - Automatically queries active Wi-Fi interfaces via `netsh wlan show interfaces`.
+  - Determines SSID, BSSID, protocol, signal strength, and channel band (2.4 GHz vs 5 GHz vs 6 GHz).
+  - For 2.4 GHz, maps center frequencies and channel widths (20 MHz / 40 MHz) against Bluetooth's 79 AFH channels (2402–2480 MHz).
+  - Calculates exact Bluetooth channels overlapped and spectrum collision percentage (~25% to 52%).
+  - Evaluates RF collision risk (High on Channel 6 or 40 MHz; Medium on Channels 1/11; None on 5/6 GHz).
+  - Generates ASCII RF spectrum collision map in terminal and GUI popup.
+  - Emits automated diagnostic finding `wifi-coexistence-24ghz`.
+  - Added native `📡 Wi-Fi Coex` button in `BTFix-GUI.ps1`.
+- **Real-Time Bluetooth RSSI & Link Quality Meter (`-Mode Signal` / `-Mode RSSI`)**:
+  - Exposes physical layer signal quality across connected peripherals.
+  - Queries `DEVPKEY_Aep_SignalStrength` (`{A35996AB-11CF-4935-8B61-A6761081ECDF} 6`) from Windows Device Association Framework.
+  - Classifies signal margin (`Excellent` >= -55 dBm, `Good` -56 to -70 dBm, `Fair` -71 to -85 dBm, `Poor` < -85 dBm).
+  - Displays dynamic ASCII signal meters (`[==========] -50 dBm`) and GUI badges alongside battery levels on peripheral cards.
+- **Dual-Boot Windows/Linux Bluetooth Pairing Key Sync (`-Mode DualBoot` / `-Mode SyncKeys`)**:
+  - Solves the classic dual-boot dilemma where pairing a Bluetooth mouse/headset in Windows invalidates it in Linux.
+  - Safely extracts cryptographic 128-bit Link Keys and BLE keys (LTK, IRK, EDIV, Rand) from `HKLM:\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Keys` via transient SYSTEM scheduled task or direct access.
+  - Converts keys into standard Linux BlueZ (`/var/lib/bluetooth/[adapter]/[device]/info`) format.
+  - Generates cross-platform NTFS-safe folder structure and copy-paste ready `sync-bluez-keys.sh` script for Ubuntu, Debian, Arch, Fedora, and openSUSE.
+  - Added native `🐧 Dual-Boot Sync` button in `BTFix-GUI.ps1`.
+- **Expanded Test Suite**:
+  - Expanded from 82 to **93 tests** (100% pass rate in Windows PowerShell 5.1 and PS7+).
+  - Maintained **0 warnings / 0 errors** in PSScriptAnalyzer.
 
 ## [2.1.0] - 2026-10-31
 
