@@ -138,7 +138,7 @@ function Invoke-SelfElevated {
 $effectiveMode = switch ($Mode) { 'Diagnose' { 'Check' } 'Repair' { 'Fix' } 'UsbTopology' { 'Topology' } 'Sentry' { 'Tray' } 'Watch' { 'Tray' } 'WifiCoex' { 'Coex' } 'RSSI' { 'Signal' } 'SyncKeys' { 'DualBoot' } default { $Mode } }
 $effectiveState = switch ($State) { 'Off' { 'Disable' } 'On' { 'Enable' } default { $State } }
 $needsAdmin = ($effectiveMode -in @('Fix', 'Rollback', 'Forget', 'DualBoot')) -or ($effectiveMode -in @('HandsFree', 'Codec', 'GameMode', 'LEAudio') -and $effectiveState -ne 'Status')
-if ($needsAdmin -and -not (Test-BTFixAdministrator)) {
+if ($needsAdmin -and -not (Test-BTFixAdministrator) -and -not $WhatIfPreference) {
     if ($NoElevation) {
         Write-Host "Mode '$Mode' needs administrator rights." -ForegroundColor Red
         exit 2

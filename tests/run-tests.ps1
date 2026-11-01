@@ -1252,8 +1252,8 @@ Describe 'dual-boot linux bluez pairing key sync' {
         $cli = Join-Path (Split-Path $PSScriptRoot -Parent) 'BTFix.ps1'
         $threw = $false
         try {
-            $out1 = & $cli -Mode DualBoot -WhatIf 6>&1
-            $out2 = & $cli -Mode SyncKeys -WhatIf 6>&1
+            $out1 = & $cli -Mode DualBoot -WhatIf -NoElevation 6>&1
+            $out2 = & $cli -Mode SyncKeys -WhatIf -NoElevation 6>&1
         } catch {
             $threw = $true
         }
