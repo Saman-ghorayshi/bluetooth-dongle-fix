@@ -644,3 +644,4 @@ switch ($effectiveMode) {
 
 Write-Host ''
 Write-Host "log: $LogPath" -ForegroundColor DarkGray
+exit 0
