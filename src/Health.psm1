@@ -1060,13 +1060,22 @@ function Get-BTFixWifiCoexistence {
     $raw = if ($PSBoundParameters.ContainsKey('RawNetshOutput') -and $null -ne $RawNetshOutput) {
         $RawNetshOutput
     } else {
-        $savedExitCode = $LASTEXITCODE
+        $hadExitCode = Test-Path 'variable:LASTEXITCODE'
+        $savedExitCode = if ($hadExitCode) { $global:LASTEXITCODE } else { $null }
         try {
             $out = (& netsh wlan show interfaces 2>&1) -join "`n"
-            $global:LASTEXITCODE = $savedExitCode
+            if ($hadExitCode) {
+                $global:LASTEXITCODE = $savedExitCode
+            } else {
+                Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+            }
             $out
         } catch {
-            $global:LASTEXITCODE = $savedExitCode
+            if ($hadExitCode) {
+                $global:LASTEXITCODE = $savedExitCode
+            } else {
+                Remove-Variable -Name LASTEXITCODE -Scope Global -ErrorAction SilentlyContinue
+            }
             ''
         }
     }
