@@ -1251,13 +1251,15 @@ Describe 'dual-boot linux bluez pairing key sync' {
     It 'routes CLI DualBoot and SyncKeys modes without throwing' {
         $cli = Join-Path (Split-Path $PSScriptRoot -Parent) 'BTFix.ps1'
         $threw = $false
+        $exMsg = ''
         try {
             $out1 = & $cli -Mode DualBoot -WhatIf -NoElevation 6>&1
             $out2 = & $cli -Mode SyncKeys -WhatIf -NoElevation 6>&1
         } catch {
             $threw = $true
+            $exMsg = $_.Exception.ToString()
         }
-        Assert-False $threw 'CLI DualBoot modes should execute cleanly'
+        Assert-False $threw "CLI DualBoot modes should execute cleanly: $exMsg"
         Assert-True ($out1.Length -gt 0)
         Assert-True ($out2.Length -gt 0)
     }

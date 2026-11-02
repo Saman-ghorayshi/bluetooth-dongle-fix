@@ -1491,6 +1491,19 @@ function Export-BTFixDualBootKey {
     # If mock registry is provided (for unit testing)
     if ($PSBoundParameters.ContainsKey('MockRegistry') -and $null -ne $MockRegistry) {
         $regData = $MockRegistry
+    } elseif ($WhatIfPreference) {
+        if (Get-Command 'Write-BTFixLog' -ErrorAction SilentlyContinue) {
+            Write-BTFixLog -Message "WhatIf: dry-run key sync export to $targetDir" -Level 'INFO' -Path $LogPath
+        }
+        return [pscustomobject]@{
+            Success      = $true
+            AdapterCount = 0
+            DeviceCount  = 0
+            OutputPath   = $targetDir
+            ScriptPath   = (Join-Path $targetDir 'sync-bluez-keys.sh')
+            Devices      = @()
+            Message      = 'WhatIf: Dry-run mode'
+        }
     } else {
         # Elevated execution check
         if (-not (Test-BTFixAdministrator)) {
@@ -1514,9 +1527,9 @@ function Export-BTFixDualBootKey {
 
         try {
             # Execute reg export under SYSTEM account via transient scheduled task
-            $cmd = "cmd.exe /c reg.exe export HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Keys `"$tempRegFile`" /y"
-            $null = & schtasks.exe /create /tn $taskName /tr $cmd /sc once /st 00:00 /ru "SYSTEM" /f 2>&1
-            $null = & schtasks.exe /run /tn $taskName 2>&1
+            $cmd = "reg.exe export HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Services\BTHPORT\Parameters\Keys `"$tempRegFile`" /y"
+            $null = cmd.exe /c "schtasks.exe /create /tn $taskName /tr `"$cmd`" /sc once /st 00:00 /ru `"SYSTEM`" /f >nul 2>&1"
+            $null = cmd.exe /c "schtasks.exe /run /tn $taskName >nul 2>&1"
 
             # Poll for file creation (up to 3 seconds)
             $deadline = (Get-Date).AddSeconds(3)
@@ -1561,9 +1574,13 @@ function Export-BTFixDualBootKey {
                     }
                 }
             }
+        } catch {
+            if (Get-Command 'Write-BTFixLog' -ErrorAction SilentlyContinue) {
+                Write-BTFixLog -Message ("Scheduled task key extraction error: " + $_.Exception.Message) -Level 'WARN' -Path $LogPath
+            }
         } finally {
-            # Clean up scheduled task and temp file
-            & schtasks.exe /delete /tn $taskName /f 2>&1 | Out-Null
+            # Clean up scheduled task and temp file safely
+            $null = cmd.exe /c "schtasks.exe /delete /tn $taskName /f >nul 2>&1"
             if (Test-Path -LiteralPath $tempRegFile) {
                 Remove-Item -LiteralPath $tempRegFile -Force -ErrorAction SilentlyContinue
             }
